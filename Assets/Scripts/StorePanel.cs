@@ -52,6 +52,8 @@ public class StorePanel : MonoBehaviour, IPanel
             pm.Open(this);
 
         store = Services.Get<IStoreService>();
+        Debug.Log($"[StorePanel] Open called. store is {(store != null ? "valid" : "NULL")}");
+
         gameObject.SetActive(true);
 
         if (feedbackText != null) feedbackText.text = "";
@@ -70,12 +72,25 @@ public class StorePanel : MonoBehaviour, IPanel
     {
         ClearSpawned();
 
+        if (store == null)
+        {
+            Debug.LogError("[StorePanel] Cannot build products — store service is null");
+            return;
+        }
+
+        Debug.Log($"[StorePanel] productContainer: {(productContainer != null ? productContainer.name : "NULL")}");
+        Debug.Log($"[StorePanel] productPrefab: {(productPrefab != null ? productPrefab.name : "NULL")}");
+
         store.GetProducts(products =>
         {
+            Debug.Log($"[StorePanel] Got {products.Count} products");
+
             foreach (var product in products)
             {
                 var obj = Instantiate(productPrefab, productContainer);
                 spawnedItems.Add(obj);
+
+                Debug.Log($"[StorePanel] Spawned product: {product.displayName}");
 
                 var nameText = obj.transform.Find("NameText")?.GetComponent<TMP_Text>();
                 var priceText = obj.transform.Find("PriceText")?.GetComponent<TMP_Text>();
