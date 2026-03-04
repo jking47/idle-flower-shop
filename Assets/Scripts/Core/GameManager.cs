@@ -2,16 +2,7 @@ using UnityEngine;
 
 /// <summary>
 /// Bootstrap and top-level game state. Attach to a persistent GameObject.
-/// Ensure this loads before other managers via Script Execution Order
-/// or by placing it higher in the scene hierarchy.
-/// 
-/// Scene setup:
-///   GameManager (this script)
-///     ├─ CurrencyManager
-///     ├─ GardenManager
-///     ├─ UpgradeManager
-///     ├─ SaveSystem
-///     └─ (future: ShopManager, PrestigeManager, etc.)
+/// All managers are components on this same GameObject (not children).
 /// </summary>
 public class GameManager : MonoBehaviour
 {
@@ -53,7 +44,7 @@ public class GameManager : MonoBehaviour
         Services.Register(this);
     }
 
-   void Start()
+    void Start()
     {
         suppressPhaseEvents = true;
 
@@ -81,42 +72,59 @@ public class GameManager : MonoBehaviour
 
     void OnCurrencyChanged(CurrencyChangedEvent evt)
     {
-        CheckPhaseProgression(evt);
+        CheckPhaseProgression();
     }
 
-   void CheckPhaseProgression(CurrencyChangedEvent evt)
+    void CheckPhaseProgression()
     {
         if (suppressPhaseEvents) return;
 
         var currency = Services.Get<CurrencyManager>();
         if (currency == null) return;
 
-        GamePhase newPhase = currentPhase;
-
-        switch (currentPhase)
+        // Loop to handle multi-phase jumps (e.g. debug adding 500 petals
+        // should advance Patch → Garden → Shop in one pass)
+        bool advanced = true;
+        while (advanced)
         {
-            case GamePhase.Patch:
-                if (currency.GetBalance(CurrencyType.Petals) >= gardenUnlockPetals)
-                    newPhase = GamePhase.Garden;
-                break;
+            advanced = false;
+            GamePhase newPhase = currentPhase;
 
-            case GamePhase.Garden:
-                if (currency.GetBalance(CurrencyType.Petals) >= shopUnlockPetals)
-                    newPhase = GamePhase.Shop;
-                break;
+            switch (currentPhase)
+            {
+                case GamePhase.Patch:
+                    if (currency.GetBalance(CurrencyType.Petals) >= gardenUnlockPetals)
+                        newPhase = GamePhase.Garden;
+                    break;
 
-            case GamePhase.Shop:
-                if (currency.GetBalance(CurrencyType.Coins) >= businessUnlockCoins)
-                    newPhase = GamePhase.Business;
-                break;
+                case GamePhase.Garden:
+                    if (currency.GetBalance(CurrencyType.Petals) >= shopUnlockPetals)
+                        newPhase = GamePhase.Shop;
+                    break;
+
+                case GamePhase.Shop:
+                    if (currency.GetBalance(CurrencyType.Coins) >= businessUnlockCoins)
+                        newPhase = GamePhase.Business;
+                    break;
+            }
+
+            if (newPhase != currentPhase)
+            {
+                currentPhase = newPhase;
+                advanced = true;
+                Debug.Log($"[GameManager] Phase unlocked: {currentPhase}");
+                EventBus.Publish(new PhaseUnlockedEvent { phase = currentPhase });
+            }
         }
+    }
 
-        if (newPhase != currentPhase)
-        {
-            currentPhase = newPhase;
-            Debug.Log($"[GameManager] Phase unlocked: {currentPhase}");
-
-            EventBus.Publish(new PhaseUnlockedEvent { phase = currentPhase });
-        }
+    /// <summary>
+    /// Called by DebugPanel to do a clean reset. Destroys this DDOL object
+    /// so the scene reload creates a fresh one.
+    /// </summary>
+    public void PrepareForReset()
+    {
+        Instance = null;
+        Destroy(gameObject);
     }
 }

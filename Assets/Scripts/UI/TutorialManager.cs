@@ -7,7 +7,7 @@ using UnityEngine.UI;
 /// <summary>
 /// Lightweight event-driven tutorial system.
 /// Shows contextual hints on first-time actions, non-blocking.
-/// Attach to a UI element under Canvas.
+/// Attach to GameManager (NOT the hint panel — panel gets deactivated).
 /// </summary>
 public class TutorialManager : MonoBehaviour
 {
@@ -17,12 +17,13 @@ public class TutorialManager : MonoBehaviour
     [SerializeField] Button dismissButton;
 
     [Header("Settings")]
-    [SerializeField] float autoHideDuration = 6f;
+    [SerializeField] float autoHideDuration = 10f;
 
     readonly HashSet<string> shownHints = new();
     readonly Queue<string> hintQueue = new();
     bool isShowingHint;
     int harvestCount;
+    int plantCount;
 
     const string SAVE_KEY = "TutorialProgress";
 
@@ -32,11 +33,11 @@ public class TutorialManager : MonoBehaviour
         { "first_plant",          "Your flower is growing! It will bloom in a few seconds." },
         { "first_bloom",          "Your flower bloomed! Tap it to harvest petals." },
         { "first_harvest",        "Nice! Spend petals to plant more flowers or buy upgrades." },
+        { "instant_bloom",        "Tip: Tap a growing flower to instantly bloom it with gems!" },
         { "upgrades_available",   "You have enough petals for an upgrade! Check the Upgrades button." },
-        { "social_intro",         "Visit the Social tab to see friends and collect gifts!" },
         { "shop_unlocked",        "Your flower shop is open! Fill customer orders for coins." },
+        { "social_intro",         "Visit the Social tab to see friends and collect gifts!" },
         { "gems_intro",           "Gems let you speed up growth and unlock premium flowers." },
-        { "instant_bloom",        "Tip: Tap a growing flower to instantly bloom it with gems!" }
     };
 
     void Awake()
@@ -74,7 +75,7 @@ public class TutorialManager : MonoBehaviour
 
     IEnumerator DelayedStartHint()
     {
-        yield return new WaitForSeconds(1f);
+        yield return new WaitForSeconds(1.5f);
         TryShowHint("first_plot_tap");
     }
 
@@ -82,7 +83,9 @@ public class TutorialManager : MonoBehaviour
 
     void OnFlowerPlanted(FlowerPlantedEvent evt)
     {
-        TryShowHint("first_plant");
+        plantCount++;
+        if (plantCount == 1)
+            TryShowHint("first_plant");
     }
 
     void OnFlowerBloomed(FlowerBloomedEvent evt)
@@ -96,17 +99,14 @@ public class TutorialManager : MonoBehaviour
 
         if (harvestCount == 1)
             TryShowHint("first_harvest");
-
-        if (harvestCount == 2)
+        else if (harvestCount == 4)
             TryShowHint("instant_bloom");
-
-        if (harvestCount == 3)
+        else if (harvestCount == 8)
             TryShowHint("social_intro");
     }
 
     void OnCurrencyChanged(CurrencyChangedEvent evt)
     {
-        // Check if player can afford any upgrade
         if (evt.currencyType == CurrencyType.Petals)
         {
             if (Services.TryGet<UpgradeManager>(out var upgrades))
@@ -126,7 +126,6 @@ public class TutorialManager : MonoBehaviour
             }
         }
 
-        // Gems intro when player first receives gems
         if (evt.currencyType == CurrencyType.Gems && evt.previousAmount == 0 && evt.newAmount > 0)
         {
             TryShowHint("gems_intro");
@@ -168,10 +167,11 @@ public class TutorialManager : MonoBehaviour
         if (hintPanel != null) hintPanel.SetActive(true);
         if (hintText != null) hintText.text = hints[hintId];
 
-        StartCoroutine(AutoHideHint());
+        StopCoroutine(nameof(AutoHideAfterDelay));
+        StartCoroutine(AutoHideAfterDelay());
     }
 
-    IEnumerator AutoHideHint()
+    IEnumerator AutoHideAfterDelay()
     {
         yield return new WaitForSeconds(autoHideDuration);
         DismissCurrentHint();
@@ -179,7 +179,7 @@ public class TutorialManager : MonoBehaviour
 
     void DismissCurrentHint()
     {
-        StopCoroutine(nameof(AutoHideHint));
+        StopCoroutine(nameof(AutoHideAfterDelay));
         if (hintPanel != null) hintPanel.SetActive(false);
 
         StartCoroutine(DelayedNextHint());
@@ -187,7 +187,7 @@ public class TutorialManager : MonoBehaviour
 
     IEnumerator DelayedNextHint()
     {
-        yield return new WaitForSeconds(0.5f);
+        yield return new WaitForSeconds(0.8f);
         ShowNextHint();
     }
 
@@ -218,6 +218,7 @@ public class TutorialManager : MonoBehaviour
     {
         shownHints.Clear();
         harvestCount = 0;
+        plantCount = 0;
         PlayerPrefs.DeleteKey(SAVE_KEY);
         Debug.Log("[Tutorial] Progress reset.");
     }

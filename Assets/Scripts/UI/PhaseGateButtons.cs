@@ -40,17 +40,14 @@ public class HUDPhaseGate : MonoBehaviour
             ? GameManager.Instance.CurrentPhase
             : GamePhase.Patch;
 
-        // Shop button visible from Shop phase onward
         if (shopButton != null)
             shopButton.SetActive(phase >= GamePhase.Shop);
 
-        // Social button visible from Garden phase onward
         if (socialButton != null)
             socialButton.SetActive(phase >= GamePhase.Garden);
 
-        // Store button always visible (monetization should be accessible)
-        // Change this if you want it gated too
+        // Store always visible — monetization accessible from the start
         if (storeButton != null)
-            storeButton.SetActive(phase >= GamePhase.Garden);
+            storeButton.SetActive(true);
     }
 }

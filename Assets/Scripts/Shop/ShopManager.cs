@@ -29,7 +29,7 @@ public class ShopManager : MonoBehaviour
     [Header("Settings")]
     [SerializeField] int baseMaxActiveOrders = 2;
     [SerializeField] float spawnIntervalSeconds = 30f;
-    [SerializeField] int absoluteMaxSlots = 4;
+    [SerializeField] int absoluteMaxSlots = 6;
 
     [Header("Reward Tuning")]
     [Tooltip("Multiplier on top of market value. Rewards bundling flowers into orders vs selling raw.")]
@@ -41,11 +41,11 @@ public class ShopManager : MonoBehaviour
     ActiveOrder[] slots;
 
     public IReadOnlyList<ActiveOrder> Slots => slots;
+    public int MaxActiveOrders => maxActiveOrders;
 
     void Awake()
     {
         Services.Register(this);
-        slots = new ActiveOrder[absoluteMaxSlots];
         maxActiveOrders = baseMaxActiveOrders;
     }
 
@@ -63,6 +63,9 @@ public class ShopManager : MonoBehaviour
 
     void Start()
     {
+        ApplyOrderSlotUpgrade();
+        slots = new ActiveOrder[absoluteMaxSlots];
+
         if (GameManager.Instance != null &&
             GameManager.Instance.CurrentPhase >= GamePhase.Shop)
             OpenShop();
@@ -113,7 +116,6 @@ public class ShopManager : MonoBehaviour
         var inv = Services.Get<InventoryManager>();
         if (inv == null) return false;
 
-        // Validate all requirements before consuming anything
         foreach (var req in order.data.requirements)
         {
             if (inv.GetCount(req.flower.name) < req.count)
@@ -123,7 +125,6 @@ public class ShopManager : MonoBehaviour
             }
         }
 
-        // Consume flowers and apply sell pressure to market
         var market = Services.Get<MarketManager>();
         foreach (var req in order.data.requirements)
         {
@@ -131,7 +132,6 @@ public class ShopManager : MonoBehaviour
             market?.ApplySellPressure(req.flower.name, req.count);
         }
 
-        // Reward = sum of market prices * order bonus, or flat baseCoinReward if no market
         double reward = CalculateReward(order, market);
         Services.Get<CurrencyManager>()?.Add(CurrencyType.Coins, reward);
 
@@ -150,15 +150,6 @@ public class ShopManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Expand active order slots. Called by display case upgrade.
-    /// </summary>
-    public void SetMaxOrders(int count)
-    {
-        maxActiveOrders = Mathf.Clamp(count, 1, absoluteMaxSlots);
-        TrySpawnOrder();
-    }
-
-    /// <summary>
     /// Get the live market-adjusted reward for a slot. Used by UI to show current payout.
     /// </summary>
     public double GetCurrentReward(int slotIndex)
@@ -168,6 +159,14 @@ public class ShopManager : MonoBehaviour
     }
 
     // --- Internal ---
+
+    void ApplyOrderSlotUpgrade()
+    {
+        int bonus = 0;
+        if (Services.TryGet<UpgradeManager>(out var upgrades))
+            bonus = upgrades.GetBonusOrderSlots();
+        maxActiveOrders = Mathf.Clamp(baseMaxActiveOrders + bonus, 1, absoluteMaxSlots);
+    }
 
     void OpenShop()
     {
@@ -209,7 +208,6 @@ public class ShopManager : MonoBehaviour
         foreach (var req in order.data.requirements)
             sum += req.count * market.GetSellPrice(req.flower);
 
-        // Apply the order bonus and upgrade sell multiplier (already inside GetSellPrice, so only bonus here)
         return sum * orderBonusMultiplier;
     }
 
@@ -227,7 +225,7 @@ public class ShopManager : MonoBehaviour
         var eligible = new List<OrderData>(orderPool.Count);
         foreach (var o in orderPool)
         {
-            if (o != null && o.minShopLevel <= 0) // TODO: GetShopLevel() once upgrade wired
+            if (o != null && o.minShopLevel <= 0)
                 eligible.Add(o);
         }
         return eligible.Count > 0 ? eligible[Random.Range(0, eligible.Count)] : null;
@@ -240,6 +238,11 @@ public class ShopManager : MonoBehaviour
 
     void OnUpgradePurchased(UpgradePurchasedEvent evt)
     {
-        // TODO: check evt.upgradeId for "display_cases" → SetMaxOrders()
+        int oldMax = maxActiveOrders;
+        ApplyOrderSlotUpgrade();
+
+        // If we gained a slot, try to fill it immediately
+        if (maxActiveOrders > oldMax && shopOpen)
+            TrySpawnOrder();
     }
 }

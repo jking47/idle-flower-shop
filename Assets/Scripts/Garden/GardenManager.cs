@@ -21,6 +21,7 @@ public class GardenManager : MonoBehaviour
     [SerializeField] double row3Cost = 50;
 
     bool autoHarvestUnlocked;
+    bool autoPlantUnlocked;
     float autoHarvestTimer;
 
     CurrencyManager currency;
@@ -30,6 +31,7 @@ public class GardenManager : MonoBehaviour
     public IReadOnlyList<FlowerBed> Plots => plots;
     public IReadOnlyList<FlowerData> AvailableFlowers => availableFlowers;
     public bool AutoHarvestUnlocked => autoHarvestUnlocked;
+    public bool AutoPlantUnlocked => autoPlantUnlocked;
 
     void Awake()
     {
@@ -45,11 +47,15 @@ public class GardenManager : MonoBehaviour
             plots[i].Initialize(i);
         }
 
-        // Lock rows 2 and 3
         ApplyRowLocks();
-
-        // Restore previously unlocked plots
         LoadUnlockState();
+
+        // Auto-plant first flower on fresh start so new players see immediate progress
+        if (!PlayerPrefs.HasKey(UNLOCK_SAVE_KEY) && availableFlowers.Count > 0)
+        {
+            if (plots.Count > 0 && !plots[0].IsLocked && plots[0].State == PlotState.Empty)
+                plots[0].Plant(availableFlowers[0]);
+        }
     }
 
     void ApplyRowLocks()
@@ -87,12 +93,21 @@ public class GardenManager : MonoBehaviour
 
     /// <summary>
     /// Attempt to plant a flower in a specific plot.
+    /// If the plot is growing and auto-plant is unlocked, updates the preferred flower instead.
     /// Returns true if successful.
     /// </summary>
     public bool PlantFlower(int plotIndex, FlowerData flower)
     {
         if (plotIndex < 0 || plotIndex >= plots.Count) return false;
         if (plots[plotIndex].IsLocked) return false;
+
+        // If plot is growing, just update what it will auto-plant next
+        if (plots[plotIndex].State == PlotState.Growing)
+        {
+            plots[plotIndex].SetPreferredFlower(flower);
+            return true;
+        }
+
         if (plots[plotIndex].State != PlotState.Empty) return false;
 
         if (flower.plantCost > 0 && !currency.Spend(CurrencyType.Petals, flower.plantCost))
@@ -117,6 +132,11 @@ public class GardenManager : MonoBehaviour
     public void UnlockAutoHarvest()
     {
         autoHarvestUnlocked = true;
+    }
+
+    public void UnlockAutoPlant()
+    {
+        autoPlantUnlocked = true;
     }
 
     void AutoHarvestAll()

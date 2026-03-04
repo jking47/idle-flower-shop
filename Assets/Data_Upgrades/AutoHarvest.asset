@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: AutoHarvest
   m_EditorClassIdentifier: Assembly-CSharp::UpgradeData
   displayName: Auto-Harvester
-  description: Automatically harvests your plants when ready
+  description: Automatically harvests your plants when ready.
   icon: {fileID: 0}
   upgradeType: 2
   costCurrency: 0
@@ -22,3 +22,4 @@ MonoBehaviour:
   baseCost: 50
   costScaling: 2
   requiredPhase: 0
+  prerequisites: []

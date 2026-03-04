@@ -275,6 +275,7 @@ MonoBehaviour:
   requirementRowPrefab: {fileID: 1913494216487073626, guid: c2cf70e665afedfc2b546d84cee42fad, type: 3}
   fillButton: {fileID: 5516765049674897663}
   fillButtonText: {fileID: 19968201901377787}
+  emptyText: {fileID: 6201730306674894472}
 --- !u!114 &5783135761678576760
 MonoBehaviour:
   m_ObjectHideFlags: 0

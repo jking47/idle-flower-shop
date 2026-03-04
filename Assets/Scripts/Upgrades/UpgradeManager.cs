@@ -35,10 +35,46 @@ public class UpgradeManager : MonoBehaviour
         GetLevel(upgrade) >= upgrade.maxLevel;
 
     /// <summary>
+    /// Check if all prerequisites for an upgrade are met (each at level >= 1).
+    /// </summary>
+    public bool PrerequisitesMet(UpgradeData upgrade)
+    {
+        if (upgrade.prerequisites == null || upgrade.prerequisites.Length == 0)
+            return true;
+
+        foreach (var prereq in upgrade.prerequisites)
+        {
+            if (prereq == null) continue;
+            if (GetLevel(prereq) < 1)
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Get the first unmet prerequisite name for display purposes.
+    /// Returns null if all prerequisites are met.
+    /// </summary>
+    public string GetFirstUnmetPrerequisite(UpgradeData upgrade)
+    {
+        if (upgrade.prerequisites == null) return null;
+
+        foreach (var prereq in upgrade.prerequisites)
+        {
+            if (prereq == null) continue;
+            if (GetLevel(prereq) < 1)
+                return prereq.displayName;
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Attempt to purchase one level of an upgrade. Returns true if successful.
     /// </summary>
     public bool Purchase(UpgradeData upgrade)
     {
+        if (!PrerequisitesMet(upgrade)) return false;
+
         int current = GetLevel(upgrade);
         if (current >= upgrade.maxLevel) return false;
 
@@ -49,7 +85,6 @@ public class UpgradeManager : MonoBehaviour
 
         levels[upgrade.name] = current + 1;
 
-        // Apply any immediate one-time effects
         ApplyImmediate(upgrade, current + 1);
 
         EventBus.Publish(new UpgradePurchasedEvent
@@ -75,39 +110,42 @@ public class UpgradeManager : MonoBehaviour
                     Services.Get<WateringCan>()?.Unlock();
                 break;
 
+            case UpgradeType.AutoPlant:
+                if (newLevel == 1)
+                    Services.Get<GardenManager>()?.UnlockAutoPlant();
+                break;
+
             case UpgradeType.PlotUnlock:
-                // Handled by listening to UpgradePurchasedEvent in GardenManager
                 break;
         }
     }
 
     // --- Multiplier queries used by other systems ---
 
-    /// <summary>
-    /// Total harvest yield multiplier. Apply as: baseYield * GetYieldMultiplier()
-    /// </summary>
     public double GetYieldMultiplier()
     {
         return 1.0 + GetTotalEffect(UpgradeType.YieldMultiplier);
     }
 
-    /// <summary>
-    /// Grow time multiplier. Apply as: baseGrowTime * GetGrowSpeedMultiplier()
-    /// Values less than 1 = faster growth.
-    /// </summary>
     public double GetGrowSpeedMultiplier()
     {
         float bonus = GetTotalEffect(UpgradeType.GrowSpeedMultiplier);
-        // Convert additive bonus to a speed divisor: 0.3 bonus = 1/1.3 = ~0.77x grow time
         return 1.0 / (1.0 + bonus);
     }
 
-    /// <summary>
-    /// Shop sell value multiplier.
-    /// </summary>
     public double GetSellValueMultiplier()
     {
         return 1.0 + GetTotalEffect(UpgradeType.SellValueMultiplier);
+    }
+
+    public float GetWaterCapacityBonus()
+    {
+        return GetTotalEffect(UpgradeType.WaterCapacity);
+    }
+
+    public int GetBonusOrderSlots()
+    {
+        return Mathf.RoundToInt(GetTotalEffect(UpgradeType.OrderSlots));
     }
 
     float GetTotalEffect(UpgradeType type)
@@ -138,7 +176,6 @@ public class UpgradeManager : MonoBehaviour
             }
         }
 
-        // Re-apply any immediate effects
         foreach (var upgrade in upgrades)
         {
             int level = GetLevel(upgrade);

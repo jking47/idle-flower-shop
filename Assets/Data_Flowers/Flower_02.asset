@@ -15,11 +15,11 @@ MonoBehaviour:
   displayName: Flower 2
   description: better than 1 at least
   rarity: 0
-  icon: {fileID: 10905, guid: 0000000000000000f000000000000000, type: 0}
+  icon: {fileID: 0}
   growTime: 15
-  baseYield: 5
-  plantCost: 4
-  baseSellValue: 2
+  baseYield: 8
+  plantCost: 5
+  baseSellValue: 5
   requiredPhase: 0
   unlockCost: -1
   socialExclusive: 0

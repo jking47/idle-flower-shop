@@ -22,8 +22,8 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
     [Tooltip("Water refilled per second while not watering")]
     [SerializeField] float waterRefillRate = 5f;
 
-    [Tooltip("Maximum water capacity")]
-    [SerializeField] float maxWater = 100f;
+    [Tooltip("Base maximum water capacity (before upgrades)")]
+    [SerializeField] float baseMaxWater = 100f;
 
     [Header("UI")]
     [SerializeField] Image canIcon;
@@ -33,6 +33,7 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
     [Header("Drag Settings")]
     [SerializeField] Canvas parentCanvas;
 
+    float maxWater;
     float currentWater;
     bool isUnlocked;
     bool isDragging;
@@ -43,6 +44,7 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
     // Dock references for reparenting during drag
     Transform dockParent;
     int dockSiblingIndex;
+    GameObject dockPlaceholder;
 
     // Track which plots are being watered this frame
     readonly HashSet<FlowerBed> wateredPlots = new();
@@ -54,6 +56,7 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
     void Awake()
     {
         Services.Register(this);
+        maxWater = baseMaxWater;
         currentWater = maxWater;
         rectTransform = GetComponent<RectTransform>();
 
@@ -61,12 +64,22 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
         if (canvasGroup == null)
             canvasGroup = gameObject.AddComponent<CanvasGroup>();
 
-        // LayoutElement lets us opt out of the dock's layout group during drag
         layoutElement = GetComponent<LayoutElement>();
         if (layoutElement == null)
             layoutElement = gameObject.AddComponent<LayoutElement>();
 
         gameObject.SetActive(false);
+    }
+
+    void OnEnable()
+    {
+        EventBus.Subscribe<UpgradePurchasedEvent>(OnUpgradePurchased);
+        RefreshCapacity();
+    }
+
+    void OnDisable()
+    {
+        EventBus.Unsubscribe<UpgradePurchasedEvent>(OnUpgradePurchased);
     }
 
     void Update()
@@ -100,6 +113,28 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
     {
         isUnlocked = true;
         gameObject.SetActive(true);
+        RefreshCapacity();
+    }
+
+    // --- Upgrade Integration ---
+
+    void OnUpgradePurchased(UpgradePurchasedEvent e) => RefreshCapacity();
+
+    void RefreshCapacity()
+    {
+        float bonus = 0f;
+        if (Services.TryGet<UpgradeManager>(out var upgrades))
+            bonus = upgrades.GetWaterCapacityBonus();
+
+        float newMax = baseMaxWater + bonus;
+
+        // If max increased, give the player the extra water immediately
+        if (newMax > maxWater)
+            currentWater += (newMax - maxWater);
+
+        maxWater = newMax;
+        currentWater = Mathf.Min(currentWater, maxWater);
+        UpdateUI();
     }
 
     // --- Drag Handlers ---
@@ -111,13 +146,19 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
         isDragging = true;
         canvasGroup.blocksRaycasts = false;
 
-        // Remember where we are in the dock
         dockParent = rectTransform.parent;
         dockSiblingIndex = rectTransform.GetSiblingIndex();
 
-        // Reparent to canvas root so the dock layout group stops fighting us
+        dockPlaceholder = new GameObject("CanPlaceholder");
+        var phRt = dockPlaceholder.AddComponent<RectTransform>();
+        phRt.SetParent(dockParent, false);
+        phRt.SetSiblingIndex(dockSiblingIndex);
+        var le = dockPlaceholder.AddComponent<LayoutElement>();
+        le.preferredWidth = rectTransform.rect.width;
+        le.preferredHeight = rectTransform.rect.height;
+
         rectTransform.SetParent(parentCanvas != null ? parentCanvas.transform : dockParent.root, true);
-        rectTransform.SetAsLastSibling(); // render on top of everything
+        rectTransform.SetAsLastSibling();
     }
 
     public void OnDrag(PointerEventData eventData)
@@ -153,9 +194,19 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
         }
         wateredPlots.Clear();
 
-        // Reparent back to dock — layout group handles positioning automatically
-        rectTransform.SetParent(dockParent, false);
-        rectTransform.SetSiblingIndex(dockSiblingIndex);
+        if (dockPlaceholder != null)
+        {
+            int idx = dockPlaceholder.transform.GetSiblingIndex();
+            Destroy(dockPlaceholder);
+            dockPlaceholder = null;
+            rectTransform.SetParent(dockParent, false);
+            rectTransform.SetSiblingIndex(idx);
+        }
+        else
+        {
+            rectTransform.SetParent(dockParent, false);
+            rectTransform.SetSiblingIndex(dockSiblingIndex);
+        }
     }
 
     void CheckPlotsUnderPointer(PointerEventData eventData)
@@ -212,6 +263,13 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
             Color c = canIcon.color;
             c.a = currentWater > 0 ? 1f : 0.4f;
             canIcon.color = c;
+        }
+
+        if (waterFillBar != null)
+        {
+            Color fc = waterFillBar.color;
+            fc.a = currentWater > 0 ? 1f : 0.3f;
+            waterFillBar.color = fc;
         }
     }
 }

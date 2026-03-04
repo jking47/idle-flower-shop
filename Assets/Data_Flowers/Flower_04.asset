@@ -17,9 +17,9 @@ MonoBehaviour:
   rarity: 0
   icon: {fileID: 0}
   growTime: 60
-  baseYield: 9
-  plantCost: 8
-  baseSellValue: 5
+  baseYield: 30
+  plantCost: 15
+  baseSellValue: 20
   requiredPhase: 0
   unlockCost: -1
   socialExclusive: 0

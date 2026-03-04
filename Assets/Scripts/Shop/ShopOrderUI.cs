@@ -5,14 +5,8 @@ using UnityEngine.UI;
 
 /// <summary>
 /// UI card for one active order slot.
-/// Assign to a prefab; ShopPanel spawns one per slot and calls Bind().
-/// 
-/// Inspector setup:
-///   - emptyState: "Waiting for order..." placeholder GameObject
-///   - activeState: root of the populated order card
-///   - requirementsContainer: vertical layout group for ShopRequirementRow prefabs
-///   - timerFill: Image with fillMethod Horizontal or Radial360
-///   - rewardText: shows live market-adjusted payout
+/// Shows order details when active, "Awaiting customer..." when empty.
+/// Flower icons preserve aspect ratio.
 /// </summary>
 public class ShopOrderUI : MonoBehaviour
 {
@@ -35,6 +29,9 @@ public class ShopOrderUI : MonoBehaviour
     [Header("Actions")]
     [SerializeField] Button fillButton;
     [SerializeField] TMP_Text fillButtonText;
+
+    [Header("Empty State Text")]
+    [SerializeField] TMP_Text emptyText;
 
     int slotIndex;
     ActiveOrder trackedOrder;
@@ -66,7 +63,6 @@ public class ShopOrderUI : MonoBehaviour
         }
         if (timerFill) timerFill.fillAmount = trackedOrder.TimerProgress;
 
-        // Refresh live reward display each frame (market prices shift over time)
         if (rewardText)
         {
             double reward = Services.Get<ShopManager>()?.GetCurrentReward(slotIndex) ?? 0;
@@ -101,9 +97,9 @@ public class ShopOrderUI : MonoBehaviour
         bool canFill = inv != null && CanFillFromInventory(inv);
 
         fillButton.interactable = canFill;
-        if (fillButtonText) fillButtonText.text = canFill ? "Fill Order" : "Need More";
 
-        foreach (var row in rows) row.Refresh();
+        if (fillButtonText)
+            fillButtonText.text = canFill ? "Fill Order" : "Grow More Flowers";
     }
 
     // --- Internal ---
@@ -127,6 +123,12 @@ public class ShopOrderUI : MonoBehaviour
         {
             var row = Instantiate(requirementRowPrefab, requirementsContainer);
             row.Set(req.flower, req.count);
+
+            // Fix squished flower icons — find the icon Image and preserve aspect
+            var icon = row.transform.Find("Icon")?.GetComponent<Image>();
+            if (icon != null)
+                icon.preserveAspect = true;
+
             rows.Add(row);
         }
     }
@@ -138,6 +140,10 @@ public class ShopOrderUI : MonoBehaviour
         trackedOrder = null;
         emptyState?.SetActive(true);
         activeState?.SetActive(false);
+
+        // Update empty state text if we have a reference
+        if (emptyText != null)
+            emptyText.text = "Awaiting customer...";
     }
 
     string FormatTime(float seconds)

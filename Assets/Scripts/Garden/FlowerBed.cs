@@ -1,3 +1,4 @@
+using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -6,7 +7,7 @@ public enum PlotState { Empty, Growing, Bloomed }
 
 /// <summary>
 /// Individual flower plot. Handles plant → grow → bloom → harvest cycle.
-/// Supports locking with a currency cost and shows gem cost indicator when growing.
+/// Supports locking with a currency cost, gem instant bloom, auto-replant via preferred flower.
 /// Attach to a UI button or world-space clickable object.
 /// </summary>
 public class FlowerBed : MonoBehaviour
@@ -23,6 +24,7 @@ public class FlowerBed : MonoBehaviour
     [SerializeField] PlotState state = PlotState.Empty;
 
     FlowerData currentFlower;
+    FlowerData preferredFlower; // what auto-plant will use next
     float growthTimer;
     float growthDuration;
     int plotIndex;
@@ -43,6 +45,7 @@ public class FlowerBed : MonoBehaviour
 
     public PlotState State => state;
     public FlowerData CurrentFlower => currentFlower;
+    public FlowerData PreferredFlower => preferredFlower;
     public float GrowthProgress => growthDuration > 0 ? growthTimer / growthDuration : 0f;
     public bool IsLocked => isLocked;
     public int PlotIndex => plotIndex;
@@ -88,26 +91,29 @@ public class FlowerBed : MonoBehaviour
 
         if (!currency.Spend(unlockCurrency, unlockCost))
         {
-            // Flash cost text red briefly to indicate can't afford
             if (lockCostText != null)
             {
                 StopCoroutine(nameof(FlashLockText));
                 StartCoroutine(FlashLockText());
             }
+            if (Services.TryGet<GameJuice>(out var juice))
+                juice.PlayError();
             return false;
         }
 
         isLocked = false;
         UpdateLockVisuals();
 
-        // Notify GardenManager to save unlock state
+        if (Services.TryGet<GameJuice>(out var j))
+            j.PlayUnlock();
+
         if (Services.TryGet<GardenManager>(out var garden))
             garden.SaveUnlockState();
 
         return true;
     }
 
-    System.Collections.IEnumerator FlashLockText()
+    IEnumerator FlashLockText()
     {
         if (lockCostText == null) yield break;
         Color original = lockCostText.color;
@@ -147,9 +153,9 @@ public class FlowerBed : MonoBehaviour
         if (showGem && gemCostText != null)
         {
             if (Services.TryGet<BoostManager>(out var boost))
-                gemCostText.text = $"{boost.InstantBloomCostGems} Gems";
+                gemCostText.text = $"Instant Bloom: {boost.InstantBloomCostGems} Gems";
             else
-                gemCostText.text = "5 Gems";
+                gemCostText.text = "Instant Bloom: 5 Gems";
         }
     }
 
@@ -157,7 +163,6 @@ public class FlowerBed : MonoBehaviour
 
     void CreateLockOverlay()
     {
-        // Full-size dimmed overlay
         lockOverlay = new GameObject("LockOverlay");
         var rt = lockOverlay.AddComponent<RectTransform>();
         rt.SetParent(transform, false);
@@ -170,7 +175,7 @@ public class FlowerBed : MonoBehaviour
         img.color = new Color(0f, 0f, 0f, 0.55f);
         img.raycastTarget = false;
 
-        // Lock icon text (padlock character)
+        // Lock icon text
         var iconGo = new GameObject("LockIcon");
         var iconRt = iconGo.AddComponent<RectTransform>();
         iconRt.SetParent(rt, false);
@@ -199,7 +204,7 @@ public class FlowerBed : MonoBehaviour
         lockCostText.alignment = TextAlignmentOptions.Center;
         lockCostText.fontSize = 22;
         lockCostText.fontStyle = FontStyles.Bold;
-        lockCostText.color = new Color(1f, 0.9f, 0.5f); // gold-ish
+        lockCostText.color = new Color(1f, 0.9f, 0.5f);
         lockCostText.enableWordWrapping = false;
         lockCostText.overflowMode = TextOverflowModes.Overflow;
 
@@ -208,19 +213,23 @@ public class FlowerBed : MonoBehaviour
 
     void CreateGemIndicator()
     {
-        // Small panel at the bottom of the flower bed
         gemIndicator = new GameObject("GemIndicator");
         var rt = gemIndicator.AddComponent<RectTransform>();
         rt.SetParent(transform, false);
-        rt.anchorMin = new Vector2(0.1f, 0f);
-        rt.anchorMax = new Vector2(0.9f, 0f);
+        rt.anchorMin = new Vector2(0f, 0f);
+        rt.anchorMax = new Vector2(1f, 0f);
         rt.pivot = new Vector2(0.5f, 0f);
-        rt.anchoredPosition = new Vector2(0f, 6f);
-        rt.sizeDelta = new Vector2(0, 30);
+        rt.anchoredPosition = new Vector2(0f, 4f);
+        rt.sizeDelta = new Vector2(0, 40);
 
         var bg = gemIndicator.AddComponent<Image>();
         bg.color = new Color(0.15f, 0.12f, 0.25f, 0.85f);
-        bg.raycastTarget = false;
+        bg.raycastTarget = true;
+
+        // Button for instant bloom
+        var btn = gemIndicator.AddComponent<Button>();
+        btn.targetGraphic = bg;
+        btn.onClick.AddListener(TryInstantBloom);
 
         // Cost text
         var textGo = new GameObject("GemText");
@@ -233,10 +242,11 @@ public class FlowerBed : MonoBehaviour
 
         gemCostText = textGo.AddComponent<TextMeshProUGUI>();
         gemCostText.alignment = TextAlignmentOptions.Center;
-        gemCostText.fontSize = 18;
-        gemCostText.color = new Color(0.6f, 0.8f, 1f); // light blue gem color
+        gemCostText.fontSize = 20;
+        gemCostText.color = new Color(0.6f, 0.8f, 1f);
         gemCostText.enableWordWrapping = false;
         gemCostText.overflowMode = TextOverflowModes.Overflow;
+        gemCostText.raycastTarget = false;
 
         gemIndicator.SetActive(false);
     }
@@ -248,6 +258,7 @@ public class FlowerBed : MonoBehaviour
         if (state != PlotState.Empty || isLocked) return false;
 
         currentFlower = flower;
+        preferredFlower = flower;
         growthTimer = 0f;
         growthDuration = flower.growTime;
         if (Services.TryGet<UpgradeManager>(out var upgrades))
@@ -263,6 +274,15 @@ public class FlowerBed : MonoBehaviour
 
         UpdateVisuals();
         return true;
+    }
+
+    /// <summary>
+    /// Set what auto-plant will use next without interrupting current growth.
+    /// Called when the player picks a new flower while something is already growing.
+    /// </summary>
+    public void SetPreferredFlower(FlowerData flower)
+    {
+        preferredFlower = flower;
     }
 
     void Update()
@@ -307,7 +327,6 @@ public class FlowerBed : MonoBehaviour
         if (Services.TryGet<WateringCan>(out var can) && can.IsDragging)
             return;
 
-        // Handle locked plots
         if (isLocked)
         {
             TryUnlock();
@@ -317,11 +336,15 @@ public class FlowerBed : MonoBehaviour
         switch (state)
         {
             case PlotState.Bloomed:
-                Harvest();
+                Harvest(false);
                 break;
             case PlotState.Growing:
-                if (Services.TryGet<BoostManager>(out var boost))
-                    boost.InstantBloom(this);
+                // If auto-plant is unlocked, tap to change preferred flower
+                // Otherwise, tap to instant bloom (gem badge also works for instant bloom)
+                if (Services.TryGet<GardenManager>(out var garden) && garden.AutoPlantUnlocked)
+                    EventBus.Publish(new PlotSelectedEvent { plotIndex = plotIndex });
+                else
+                    TryInstantBloom();
                 break;
             case PlotState.Empty:
                 EventBus.Publish(new PlotSelectedEvent { plotIndex = plotIndex });
@@ -329,7 +352,17 @@ public class FlowerBed : MonoBehaviour
         }
     }
 
-    void Harvest()
+    /// <summary>
+    /// Instant bloom via gem indicator tap.
+    /// </summary>
+    public void TryInstantBloom()
+    {
+        if (state != PlotState.Growing) return;
+        if (Services.TryGet<BoostManager>(out var boost))
+            boost.InstantBloom(this);
+    }
+
+    void Harvest(bool isAuto)
     {
         if (state != PlotState.Bloomed || currentFlower == null) return;
 
@@ -344,7 +377,8 @@ public class FlowerBed : MonoBehaviour
         EventBus.Publish(new FlowerHarvestedEvent
         {
             flowerData = currentFlower,
-            yield = yield
+            yield = yield,
+            plotIndex = plotIndex
         });
 
         currentFlower = null;
@@ -353,12 +387,20 @@ public class FlowerBed : MonoBehaviour
         lastStageSprite = null;
 
         UpdateVisuals();
+
+        // Auto-replant using preferred flower
+        if (preferredFlower != null &&
+            Services.TryGet<GardenManager>(out var garden) &&
+            garden.AutoPlantUnlocked)
+        {
+            garden.PlantFlower(plotIndex, preferredFlower);
+        }
     }
 
     public void AutoHarvest()
     {
         if (state != PlotState.Bloomed || currentFlower == null) return;
-        Harvest();
+        Harvest(true);
     }
 
     public void ForceBloom()
@@ -398,9 +440,10 @@ public class FlowerBed : MonoBehaviour
 
     public void LoadState(FlowerData flower, PlotState savedState, float progress)
     {
-        if (isLocked) return; // don't load flower data into locked plots
+        if (isLocked) return;
 
         currentFlower = flower;
+        preferredFlower = flower;
         state = savedState;
 
         growthDuration = flower.growTime;

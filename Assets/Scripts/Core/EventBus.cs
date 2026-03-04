@@ -4,7 +4,9 @@ using UnityEngine;
 
 /// <summary>
 /// Type-based event bus for decoupled cross-system communication.
-/// 
+/// Wraps subscriber invocations in try/catch so one broken subscriber
+/// cannot prevent other subscribers from receiving the event.
+///
 /// Usage:
 ///   // Define an event struct
 ///   public struct CurrencyChangedEvent { public CurrencyType type; public double amount; }
@@ -51,9 +53,21 @@ public static class EventBus
     public static void Publish<T>(T evt) where T : struct
     {
         var type = typeof(T);
-        if (listeners.TryGetValue(type, out var existing))
+        if (!listeners.TryGetValue(type, out var existing)) return;
+
+        // Invoke each subscriber individually so one exception
+        // doesn't kill delivery to remaining subscribers
+        var invocationList = existing.GetInvocationList();
+        foreach (var del in invocationList)
         {
-            ((Action<T>)existing)?.Invoke(evt);
+            try
+            {
+                ((Action<T>)del).Invoke(evt);
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+            }
         }
     }
 

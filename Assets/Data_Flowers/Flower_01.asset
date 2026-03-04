@@ -15,10 +15,10 @@ MonoBehaviour:
   displayName: Basic Flower
   description: the most basic of flowers
   rarity: 0
-  icon: {fileID: 10905, guid: 0000000000000000f000000000000000, type: 0}
-  growTime: 10
-  baseYield: 3
-  plantCost: 2
+  icon: {fileID: 0}
+  growTime: 5
+  baseYield: 5
+  plantCost: 3
   baseSellValue: 1
   requiredPhase: 0
   unlockCost: -1

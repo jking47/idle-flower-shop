@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: WateringCan
   m_EditorClassIdentifier: Assembly-CSharp::UpgradeData
   displayName: Watering Can
-  description: 
+  description: Water your plants that are growing to increase growth speed.
   icon: {fileID: 0}
   upgradeType: 5
   costCurrency: 0
@@ -22,3 +22,4 @@ MonoBehaviour:
   baseCost: 30
   costScaling: 1
   requiredPhase: 0
+  prerequisites: []

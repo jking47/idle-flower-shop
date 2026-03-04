@@ -3,12 +3,8 @@ using UnityEngine.UI;
 
 /// <summary>
 /// Shop UI panel. Implements IPanel for PanelManager (one panel open at a time).
-/// 
-/// Inspector setup:
-///   - orderSlots: 4 ShopOrderUI components (one per max slot), assign in order
-///   - lockedOverlay: GameObject shown before Shop phase
-///   - openButton: nav bar Shop button
-///   - closeButton: in-panel close button
+/// Only shows slots up to ShopManager.MaxActiveOrders. Hidden slots become visible
+/// when the Order Slots upgrade is purchased.
 /// </summary>
 public class ShopPanel : MonoBehaviour, IPanel
 {
@@ -25,13 +21,11 @@ public class ShopPanel : MonoBehaviour, IPanel
 
     ShopManager shop;
 
-    // --- Lifecycle ---
-
     void Awake()
     {
         Services.Register(this);
 
-        if (openButton != null)  openButton.onClick.AddListener(Open);
+        if (openButton != null) openButton.onClick.AddListener(Open);
         if (closeButton != null) closeButton.onClick.AddListener(Close);
 
         gameObject.SetActive(false);
@@ -57,6 +51,7 @@ public class ShopPanel : MonoBehaviour, IPanel
         EventBus.Subscribe<OrderExpiredEvent>(OnOrderExpired);
         EventBus.Subscribe<InventoryChangedEvent>(OnInventoryChanged);
         EventBus.Subscribe<PhaseUnlockedEvent>(OnPhaseUnlocked);
+        EventBus.Subscribe<UpgradePurchasedEvent>(OnUpgradePurchased);
     }
 
     void OnDisable()
@@ -66,6 +61,7 @@ public class ShopPanel : MonoBehaviour, IPanel
         EventBus.Unsubscribe<OrderExpiredEvent>(OnOrderExpired);
         EventBus.Unsubscribe<InventoryChangedEvent>(OnInventoryChanged);
         EventBus.Unsubscribe<PhaseUnlockedEvent>(OnPhaseUnlocked);
+        EventBus.Unsubscribe<UpgradePurchasedEvent>(OnUpgradePurchased);
     }
 
     // --- IPanel ---
@@ -86,20 +82,27 @@ public class ShopPanel : MonoBehaviour, IPanel
 
     // --- Event handlers ---
 
-    void OnOrderSpawned(OrderSpawnedEvent e)  => RefreshSlot(e.slotIndex);
-    void OnOrderFilled(OrderFilledEvent e)    => RefreshSlot(e.slotIndex);
-    void OnOrderExpired(OrderExpiredEvent e)  => RefreshSlot(e.slotIndex);
+    void OnOrderSpawned(OrderSpawnedEvent e) => RefreshSlot(e.slotIndex);
+    void OnOrderFilled(OrderFilledEvent e) => RefreshSlot(e.slotIndex);
+    void OnOrderExpired(OrderExpiredEvent e) => RefreshSlot(e.slotIndex);
 
     void OnInventoryChanged(InventoryChangedEvent e)
     {
-        foreach (var slot in orderSlots)
-            slot.RefreshFillButton();
+        if (shop == null) return;
+        for (int i = 0; i < orderSlots.Length && i < shop.MaxActiveOrders; i++)
+            orderSlots[i].RefreshFillButton();
     }
 
     void OnPhaseUnlocked(PhaseUnlockedEvent evt)
     {
         if (evt.phase == GamePhase.Shop)
             lockedOverlay?.SetActive(false);
+    }
+
+    void OnUpgradePurchased(UpgradePurchasedEvent evt)
+    {
+        // Slot count may have changed — refresh visibility
+        RefreshAllSlots();
     }
 
     // --- Helpers ---
@@ -113,10 +116,23 @@ public class ShopPanel : MonoBehaviour, IPanel
     void RefreshAllSlots()
     {
         if (shop == null) return;
+
+        int activeCount = shop.MaxActiveOrders;
+
         for (int i = 0; i < orderSlots.Length; i++)
         {
-            var order = i < shop.Slots.Count ? shop.Slots[i] : null;
-            orderSlots[i].Bind(i, order);
+            if (i < activeCount)
+            {
+                // Show this slot
+                orderSlots[i].gameObject.SetActive(true);
+                var order = i < shop.Slots.Count ? shop.Slots[i] : null;
+                orderSlots[i].Bind(i, order);
+            }
+            else
+            {
+                // Hide slots beyond current max
+                orderSlots[i].gameObject.SetActive(false);
+            }
         }
     }
 }

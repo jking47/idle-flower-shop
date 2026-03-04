@@ -2,12 +2,15 @@ using UnityEngine;
 
 public enum UpgradeType
 {
-    YieldMultiplier,    // Increases petal harvest amount
-    GrowSpeedMultiplier,// Reduces grow time
-    AutoHarvest,        // Unlocks/improves auto-harvest
-    PlotUnlock,         // Adds a new garden plot
-    SellValueMultiplier,// Increases shop coin value (Phase 3)
-    WateringCan         // Unlocks the watering can tool
+    YieldMultiplier,
+    GrowSpeedMultiplier,
+    AutoHarvest,
+    PlotUnlock,
+    SellValueMultiplier,
+    WateringCan,
+    AutoPlant,
+    WaterCapacity,
+    OrderSlots
 }
 
 /// <summary>
@@ -40,6 +43,9 @@ public class UpgradeData : ScriptableObject
 
     [Header("Unlock")]
     public GamePhase requiredPhase = GamePhase.Patch;
+
+    [Tooltip("Upgrades that must have at least 1 level before this becomes available")]
+    public UpgradeData[] prerequisites;
 
     /// <summary>
     /// Cost to purchase the next level from the given current level.

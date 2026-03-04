@@ -5,70 +5,28 @@ using UnityEngine.SceneManagement;
 
 /// <summary>
 /// Debug panel for testing and recruiter demos.
-/// Toggle visibility with a small button in the corner.
-/// Attach to a panel under Canvas.
+/// Self-builds buttons programmatically. Only needs toggleButton wired in inspector.
+/// Builds content as a sibling of DebugPanel, not a child, so it won't cover the button.
 /// </summary>
 public class DebugPanel : MonoBehaviour
 {
-    [Header("Toggle")]
+    [Header("Toggle Button (wire in inspector)")]
     [SerializeField] Button toggleButton;
 
-    [Header("Panel Content")]
-    [SerializeField] GameObject contentPanel;
-
-    [Header("Currency Buttons")]
-    [SerializeField] Button addPetalsButton;
-    [SerializeField] Button addCoinsButton;
-    [SerializeField] Button addRenownButton;
-    [SerializeField] Button addGemsButton;
-
-    [Header("Time")]
-    [SerializeField] Button skip1MinButton;
-    [SerializeField] Button skip1HourButton;
-    [SerializeField] Button skip8HourButton;
-
-    [Header("Phase")]
-    [SerializeField] Button nextPhaseButton;
-    [SerializeField] TMP_Text phaseText;
-
-    [Header("Save")]
-    [SerializeField] Button wipeSaveButton;
-    [SerializeField] Button forceSaveButton;
-
     [Header("Settings")]
-    [SerializeField] double currencyGrantAmount = 500;
+    [SerializeField] double smallGrant = 100;
+    [SerializeField] double largeGrant = 1000;
+
+    GameObject contentPanel;
+    TMP_Text phaseText;
 
     void Awake()
     {
         if (toggleButton != null)
             toggleButton.onClick.AddListener(TogglePanel);
 
-        if (addPetalsButton != null)
-            addPetalsButton.onClick.AddListener(() => AddCurrency(CurrencyType.Petals));
-        if (addCoinsButton != null)
-            addCoinsButton.onClick.AddListener(() => AddCurrency(CurrencyType.Coins));
-        if (addRenownButton != null)
-            addRenownButton.onClick.AddListener(() => AddCurrency(CurrencyType.Renown));
-        if (addGemsButton != null)
-            addGemsButton.onClick.AddListener(() => AddCurrency(CurrencyType.Gems));
-
-        if (skip1MinButton != null)
-            skip1MinButton.onClick.AddListener(() => SkipTime(60f));
-        if (skip1HourButton != null)
-            skip1HourButton.onClick.AddListener(() => SkipTime(3600f));
-        if (skip8HourButton != null)
-            skip8HourButton.onClick.AddListener(() => SkipTime(28800f));
-
-        if (nextPhaseButton != null)
-            nextPhaseButton.onClick.AddListener(AdvancePhase);
-
-        if (wipeSaveButton != null)
-            wipeSaveButton.onClick.AddListener(WipeSave);
-        if (forceSaveButton != null)
-            forceSaveButton.onClick.AddListener(ForceSave);
-
-        if (contentPanel != null)
-            contentPanel.SetActive(false);
+        BuildPanel();
+        contentPanel.SetActive(false);
     }
 
     void TogglePanel()
@@ -81,13 +39,16 @@ public class DebugPanel : MonoBehaviour
         }
     }
 
-    void AddCurrency(CurrencyType type)
+    // --- Actions ---
+
+    void AddCurrency(CurrencyType type, double amount)
     {
         var currency = Services.Get<CurrencyManager>();
         if (currency != null)
         {
-            currency.Add(type, currencyGrantAmount);
-            Debug.Log($"[Debug] Added {currencyGrantAmount} {type}");
+            currency.Add(type, amount);
+            Debug.Log($"[Debug] Added {amount} {type}");
+            RefreshDisplay();
         }
     }
 
@@ -97,7 +58,7 @@ public class DebugPanel : MonoBehaviour
         if (garden != null)
         {
             garden.ApplyOfflineTime(seconds);
-            Debug.Log($"[Debug] Skipped {seconds}s of time");
+            Debug.Log($"[Debug] Skipped {seconds}s");
         }
     }
 
@@ -121,13 +82,17 @@ public class DebugPanel : MonoBehaviour
     {
         var save = Services.Get<SaveSystem>();
         if (save != null)
-        {
             save.DeleteSave();
-            Debug.Log("[Debug] Save wiped. Reloading scene...");
-            Services.Clear();
-            EventBus.Clear();
-            SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
-        }
+
+        Debug.Log("[Debug] Save wiped. Reloading...");
+
+        var gm = GameManager.Instance;
+        if (gm != null)
+            gm.PrepareForReset();
+
+        Services.Clear();
+        EventBus.Clear();
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
     void ForceSave()
@@ -145,5 +110,175 @@ public class DebugPanel : MonoBehaviour
         var gm = Services.Get<GameManager>();
         if (phaseText != null && gm != null)
             phaseText.text = $"Phase: {gm.CurrentPhase}";
+    }
+
+    // --- Build UI ---
+
+    void BuildPanel()
+    {
+        // Build as sibling of DebugPanel under the same parent (Canvas)
+        // so it doesn't cover the toggle button
+        contentPanel = new GameObject("DebugContent");
+        var panelRt = contentPanel.AddComponent<RectTransform>();
+        panelRt.SetParent(transform.parent, false);
+
+        // Position: left half of screen, above the debug button
+        panelRt.anchorMin = new Vector2(0f, 0.05f);
+        panelRt.anchorMax = new Vector2(0.55f, 0.85f);
+        panelRt.offsetMin = new Vector2(10, 0);
+        panelRt.offsetMax = new Vector2(-10, 0);
+
+        var panelImg = contentPanel.AddComponent<Image>();
+        panelImg.color = new Color(0.12f, 0.14f, 0.18f, 0.95f);
+
+        // Vertical layout directly on the panel
+        var vlg = contentPanel.AddComponent<VerticalLayoutGroup>();
+        vlg.spacing = 5;
+        vlg.padding = new RectOffset(8, 8, 8, 8);
+        vlg.childForceExpandWidth = true;
+        vlg.childForceExpandHeight = false;
+        vlg.childControlWidth = true;
+        vlg.childControlHeight = true;
+        vlg.childAlignment = TextAnchor.UpperCenter;
+
+        // --- Phase display ---
+        phaseText = MakeLabel(panelRt, "Phase: --", 22);
+
+        // --- Currency ---
+        MakeLabel(panelRt, "— Currency —", 18);
+        MakeButtonRow(panelRt, new (string, System.Action)[]
+        {
+            ($"+{smallGrant} Petals", () => AddCurrency(CurrencyType.Petals, smallGrant)),
+            ($"+{largeGrant} Petals", () => AddCurrency(CurrencyType.Petals, largeGrant))
+        });
+        MakeButtonRow(panelRt, new (string, System.Action)[]
+        {
+            ($"+{smallGrant} Coins", () => AddCurrency(CurrencyType.Coins, smallGrant)),
+            ($"+{largeGrant} Coins", () => AddCurrency(CurrencyType.Coins, largeGrant))
+        });
+        MakeButtonRow(panelRt, new (string, System.Action)[]
+        {
+            ($"+{smallGrant} Gems", () => AddCurrency(CurrencyType.Gems, smallGrant)),
+            ($"+{smallGrant} Renown", () => AddCurrency(CurrencyType.Renown, smallGrant))
+        });
+
+        // --- Time ---
+        MakeLabel(panelRt, "— Time Skip —", 18);
+        MakeButtonRow(panelRt, new (string, System.Action)[]
+        {
+            ("1 Min", () => SkipTime(60f)),
+            ("1 Hour", () => SkipTime(3600f)),
+            ("8 Hours", () => SkipTime(28800f))
+        });
+
+        // --- Phase ---
+        MakeButton(panelRt, "Next Phase", AdvancePhase);
+
+        // --- Save ---
+        MakeLabel(panelRt, "— Save —", 18);
+        MakeButtonRow(panelRt, new (string, System.Action)[]
+        {
+            ("Force Save", ForceSave),
+            ("Wipe + Restart", WipeSave)
+        });
+    }
+
+    TMP_Text MakeLabel(RectTransform parent, string text, float fontSize)
+    {
+        var go = new GameObject("Label");
+        var rt = go.AddComponent<RectTransform>();
+        rt.SetParent(parent, false);
+        var le = go.AddComponent<LayoutElement>();
+        le.preferredHeight = fontSize + 10;
+
+        var tmp = go.AddComponent<TextMeshProUGUI>();
+        tmp.text = text;
+        tmp.fontSize = fontSize;
+        tmp.fontStyle = FontStyles.Bold;
+        tmp.color = new Color(0.8f, 0.8f, 0.8f);
+        tmp.alignment = TextAlignmentOptions.Center;
+        tmp.enableWordWrapping = false;
+        tmp.raycastTarget = false;
+        return tmp;
+    }
+
+    void MakeButton(RectTransform parent, string label, System.Action onClick)
+    {
+        var go = new GameObject(label);
+        var rt = go.AddComponent<RectTransform>();
+        rt.SetParent(parent, false);
+        var le = go.AddComponent<LayoutElement>();
+        le.preferredHeight = 44;
+
+        var img = go.AddComponent<Image>();
+        img.color = new Color(0.3f, 0.55f, 0.35f);
+
+        var btn = go.AddComponent<Button>();
+        btn.targetGraphic = img;
+        btn.onClick.AddListener(() => onClick());
+
+        var textGo = new GameObject("Text");
+        var textRt = textGo.AddComponent<RectTransform>();
+        textRt.SetParent(rt, false);
+        textRt.anchorMin = Vector2.zero;
+        textRt.anchorMax = Vector2.one;
+        textRt.offsetMin = Vector2.zero;
+        textRt.offsetMax = Vector2.zero;
+
+        var tmp = textGo.AddComponent<TextMeshProUGUI>();
+        tmp.text = label;
+        tmp.fontSize = 18;
+        tmp.fontStyle = FontStyles.Bold;
+        tmp.color = Color.white;
+        tmp.alignment = TextAlignmentOptions.Center;
+        tmp.enableWordWrapping = false;
+        tmp.raycastTarget = false;
+    }
+
+    void MakeButtonRow(RectTransform parent, (string label, System.Action onClick)[] buttons)
+    {
+        var row = new GameObject("Row");
+        var rowRt = row.AddComponent<RectTransform>();
+        rowRt.SetParent(parent, false);
+        var le = row.AddComponent<LayoutElement>();
+        le.preferredHeight = 44;
+
+        var hlg = row.AddComponent<HorizontalLayoutGroup>();
+        hlg.spacing = 4;
+        hlg.childForceExpandWidth = true;
+        hlg.childForceExpandHeight = true;
+        hlg.childControlWidth = true;
+        hlg.childControlHeight = true;
+
+        foreach (var (label, onClick) in buttons)
+        {
+            var go = new GameObject(label);
+            var rt = go.AddComponent<RectTransform>();
+            rt.SetParent(rowRt, false);
+
+            var img = go.AddComponent<Image>();
+            img.color = new Color(0.3f, 0.55f, 0.35f);
+
+            var btn = go.AddComponent<Button>();
+            btn.targetGraphic = img;
+            btn.onClick.AddListener(() => onClick());
+
+            var textGo = new GameObject("Text");
+            var textRt = textGo.AddComponent<RectTransform>();
+            textRt.SetParent(rt, false);
+            textRt.anchorMin = Vector2.zero;
+            textRt.anchorMax = Vector2.one;
+            textRt.offsetMin = Vector2.zero;
+            textRt.offsetMax = Vector2.zero;
+
+            var tmp = textGo.AddComponent<TextMeshProUGUI>();
+            tmp.text = label;
+            tmp.fontSize = 18;
+            tmp.fontStyle = FontStyles.Bold;
+            tmp.color = Color.white;
+            tmp.alignment = TextAlignmentOptions.Center;
+            tmp.enableWordWrapping = false;
+            tmp.raycastTarget = false;
+        }
     }
 }

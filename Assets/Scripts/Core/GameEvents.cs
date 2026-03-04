@@ -21,6 +21,7 @@ public struct FlowerHarvestedEvent
 {
     public FlowerData flowerData;
     public double yield;
+    public int plotIndex;
 }
 
 public struct FlowerBloomedEvent
