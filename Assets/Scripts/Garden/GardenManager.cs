@@ -3,7 +3,7 @@ using UnityEngine;
 
 /// <summary>
 /// Manages all flower plots and available flower types.
-/// Handles planting requests and auto-harvest ticking.
+/// Handles planting requests, auto-harvest ticking, and plot unlock state.
 /// </summary>
 public class GardenManager : MonoBehaviour
 {
@@ -14,10 +14,18 @@ public class GardenManager : MonoBehaviour
     [Header("Auto-Harvest")]
     [SerializeField] float autoHarvestInterval = 5f;
 
+    [Header("Plot Unlock Costs")]
+    [Tooltip("Row 1 (plots 0-2) is free. Row 2 costs petals, Row 3 costs coins.")]
+    [SerializeField] int plotsPerRow = 3;
+    [SerializeField] double row2Cost = 100;
+    [SerializeField] double row3Cost = 50;
+
     bool autoHarvestUnlocked;
     float autoHarvestTimer;
 
     CurrencyManager currency;
+
+    const string UNLOCK_SAVE_KEY = "UnlockedPlots";
 
     public IReadOnlyList<FlowerBed> Plots => plots;
     public IReadOnlyList<FlowerData> AvailableFlowers => availableFlowers;
@@ -35,6 +43,33 @@ public class GardenManager : MonoBehaviour
         for (int i = 0; i < plots.Count; i++)
         {
             plots[i].Initialize(i);
+        }
+
+        // Lock rows 2 and 3
+        ApplyRowLocks();
+
+        // Restore previously unlocked plots
+        LoadUnlockState();
+    }
+
+    void ApplyRowLocks()
+    {
+        for (int i = 0; i < plots.Count; i++)
+        {
+            int row = i / plotsPerRow;
+
+            switch (row)
+            {
+                case 0:
+                    // Row 1 — free, no lock
+                    break;
+                case 1:
+                    plots[i].SetLocked(row2Cost, CurrencyType.Petals);
+                    break;
+                default:
+                    plots[i].SetLocked(row3Cost, CurrencyType.Coins);
+                    break;
+            }
         }
     }
 
@@ -57,6 +92,7 @@ public class GardenManager : MonoBehaviour
     public bool PlantFlower(int plotIndex, FlowerData flower)
     {
         if (plotIndex < 0 || plotIndex >= plots.Count) return false;
+        if (plots[plotIndex].IsLocked) return false;
         if (plots[plotIndex].State != PlotState.Empty) return false;
 
         if (flower.plantCost > 0 && !currency.Spend(CurrencyType.Petals, flower.plantCost))
@@ -66,13 +102,13 @@ public class GardenManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Plant in the first available empty plot.
+    /// Plant in the first available empty unlocked plot.
     /// </summary>
     public bool PlantFlowerInFirstEmpty(FlowerData flower)
     {
         for (int i = 0; i < plots.Count; i++)
         {
-            if (plots[i].State == PlotState.Empty)
+            if (!plots[i].IsLocked && plots[i].State == PlotState.Empty)
                 return PlantFlower(i, flower);
         }
         return false;
@@ -87,7 +123,7 @@ public class GardenManager : MonoBehaviour
     {
         foreach (var plot in plots)
         {
-            if (plot.State == PlotState.Bloomed)
+            if (!plot.IsLocked && plot.State == PlotState.Bloomed)
             {
                 plot.AutoHarvest();
             }
@@ -101,10 +137,10 @@ public class GardenManager : MonoBehaviour
     {
         foreach (var plot in plots)
         {
-            plot.ApplyOfflineTime(seconds);
+            if (!plot.IsLocked)
+                plot.ApplyOfflineTime(seconds);
         }
 
-        // If auto-harvest is unlocked, simulate harvest cycles
         if (autoHarvestUnlocked && autoHarvestInterval > 0)
         {
             int cycles = Mathf.FloorToInt(seconds / autoHarvestInterval);
@@ -129,6 +165,32 @@ public class GardenManager : MonoBehaviour
             if (flower == null) continue;
 
             plots[i].LoadState(flower, (PlotState)plotData.state, plotData.growthProgress);
+        }
+    }
+
+    // --- Unlock Persistence ---
+
+    public void SaveUnlockState()
+    {
+        var unlocked = new List<string>();
+        for (int i = 0; i < plots.Count; i++)
+        {
+            if (!plots[i].IsLocked)
+                unlocked.Add(i.ToString());
+        }
+        PlayerPrefs.SetString(UNLOCK_SAVE_KEY, string.Join(",", unlocked));
+        PlayerPrefs.Save();
+    }
+
+    void LoadUnlockState()
+    {
+        if (!PlayerPrefs.HasKey(UNLOCK_SAVE_KEY)) return;
+
+        string data = PlayerPrefs.GetString(UNLOCK_SAVE_KEY);
+        foreach (string idx in data.Split(','))
+        {
+            if (int.TryParse(idx, out int i) && i >= 0 && i < plots.Count)
+                plots[i].ClearLock();
         }
     }
 

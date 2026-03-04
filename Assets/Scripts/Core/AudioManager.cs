@@ -20,7 +20,7 @@ public class AudioManager : MonoBehaviour
     [Tooltip("Assign your music clips here. Index 0 plays by default.")]
     [SerializeField] AudioClip[] bgmTracks;
 
-    [SerializeField] int startTrackIndex = -1; // -1 = random track on startup
+    [SerializeField] int startTrackIndex = -1;
 
     [SerializeField, Range(0f, 1f)] float bgmVolume = 0.4f;
     [SerializeField] float crossfadeDuration = 1.5f;
@@ -29,6 +29,7 @@ public class AudioManager : MonoBehaviour
     AudioSource bgmSourceB;
     int currentTrackIndex = -1;
     bool sourceAActive = true;
+    bool isMuted;
     Coroutine fadeRoutine;
 
     AudioSource ActiveSource => sourceAActive ? bgmSourceA : bgmSourceB;
@@ -83,14 +84,22 @@ public class AudioManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Set BGM volume (0-1). Applied immediately.
+    /// Set BGM volume (0-1). Stored even when muted.
     /// </summary>
     public void SetBGMVolume(float volume)
     {
         bgmVolume = Mathf.Clamp01(volume);
-        // Update whichever source is currently active
         if (ActiveSource.isPlaying)
-            ActiveSource.volume = bgmVolume;
+            ActiveSource.volume = isMuted ? 0f : bgmVolume;
+    }
+
+    /// <summary>
+    /// Mute or unmute BGM. Preserves volume setting for unmute.
+    /// </summary>
+    public void SetMuted(bool muted)
+    {
+        isMuted = muted;
+        ActiveSource.volume = isMuted ? 0f : bgmVolume;
     }
 
     /// <summary>
@@ -105,6 +114,7 @@ public class AudioManager : MonoBehaviour
     }
 
     public float BGMVolume => bgmVolume;
+    public bool IsMuted => isMuted;
     public int CurrentTrackIndex => currentTrackIndex;
     public int TrackCount => bgmTracks != null ? bgmTracks.Length : 0;
 
@@ -127,14 +137,14 @@ public class AudioManager : MonoBehaviour
             float t = elapsed / crossfadeDuration;
 
             fadeOut.volume = Mathf.Lerp(startVolume, 0f, t);
-            fadeIn.volume = Mathf.Lerp(0f, bgmVolume, t);
+            fadeIn.volume = Mathf.Lerp(0f, isMuted ? 0f : bgmVolume, t);
 
             yield return null;
         }
 
         fadeOut.Stop();
         fadeOut.volume = 0f;
-        fadeIn.volume = bgmVolume;
+        fadeIn.volume = isMuted ? 0f : bgmVolume;
         fadeRoutine = null;
     }
 
