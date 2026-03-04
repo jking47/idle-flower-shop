@@ -24,6 +24,7 @@ public class FlowerBed : MonoBehaviour
     float growthTimer;
     float growthDuration;
     int plotIndex;
+    Sprite lastStageSprite; // tracks current growth sprite to avoid redundant swaps
 
     CurrencyManager currency;
 
@@ -43,9 +44,6 @@ public class FlowerBed : MonoBehaviour
         plotIndex = index;
     }
 
-    /// <summary>
-    /// Plant a flower in this plot. Caller is responsible for checking/spending cost.
-    /// </summary>
     public bool Plant(FlowerData flower)
     {
         if (state != PlotState.Empty) return false;
@@ -56,6 +54,7 @@ public class FlowerBed : MonoBehaviour
         if (Services.TryGet<UpgradeManager>(out var upgrades))
             growthDuration *= (float)upgrades.GetGrowSpeedMultiplier();
         state = PlotState.Growing;
+        lastStageSprite = null;
 
         EventBus.Publish(new FlowerPlantedEvent
         {
@@ -76,6 +75,9 @@ public class FlowerBed : MonoBehaviour
         if (progressFill != null)
             progressFill.fillAmount = GrowthProgress;
 
+        // Update growth stage sprite
+        UpdateGrowthSprite();
+
         if (growthTimer >= growthDuration)
         {
             state = PlotState.Bloomed;
@@ -90,9 +92,24 @@ public class FlowerBed : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Swap the flower image to match current growth stage.
+    /// Only updates when the stage actually changes.
+    /// </summary>
+    void UpdateGrowthSprite()
+    {
+        if (currentFlower == null || flowerImage == null) return;
+
+        var sprite = FlowerSpriteInitializer.GetStageSprite(currentFlower.name, GrowthProgress);
+        if (sprite != null && sprite != lastStageSprite)
+        {
+            flowerImage.sprite = sprite;
+            lastStageSprite = sprite;
+        }
+    }
+
     void OnClicked()
     {
-        // Don't open menus while dragging the watering can
         if (Services.TryGet<WateringCan>(out var can) && can.IsDragging)
             return;
 
@@ -132,22 +149,17 @@ public class FlowerBed : MonoBehaviour
         currentFlower = null;
         state = PlotState.Empty;
         growthTimer = 0f;
+        lastStageSprite = null;
 
         UpdateVisuals();
     }
 
-    /// <summary>
-    /// For auto-harvest upgrade: harvest only, does not replant.
-    /// </summary>
     public void AutoHarvest()
     {
         if (state != PlotState.Bloomed || currentFlower == null) return;
         Harvest();
     }
 
-    /// <summary>
-    /// Instantly bloom this flower. Used by gem-purchased instant bloom.
-    /// </summary>
     public void ForceBloom()
     {
         if (state != PlotState.Growing) return;
@@ -164,9 +176,6 @@ public class FlowerBed : MonoBehaviour
         UpdateVisuals();
     }
 
-    /// <summary>
-    /// Apply elapsed time for offline progress or watering boost.
-    /// </summary>
     public void ApplyOfflineTime(float seconds)
     {
         if (state != PlotState.Growing) return;
@@ -186,9 +195,6 @@ public class FlowerBed : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Restore state from save data.
-    /// </summary>
     public void LoadState(FlowerData flower, PlotState savedState, float progress)
     {
         currentFlower = flower;
@@ -199,13 +205,11 @@ public class FlowerBed : MonoBehaviour
             growthDuration *= (float)upgrades.GetGrowSpeedMultiplier();
 
         growthTimer = progress * growthDuration;
+        lastStageSprite = null;
 
         UpdateVisuals();
     }
 
-    /// <summary>
-    /// Toggle watering visual effect. Called by WateringCan.
-    /// </summary>
     public void SetWateringVisual(bool watering)
     {
         if (wateringEffect != null)
@@ -221,18 +225,30 @@ public class FlowerBed : MonoBehaviour
             case PlotState.Empty:
                 flowerImage.enabled = false;
                 if (progressFill != null) progressFill.fillAmount = 0f;
+                lastStageSprite = null;
                 break;
 
             case PlotState.Growing:
                 flowerImage.enabled = true;
-                flowerImage.sprite = currentFlower?.icon;
-                flowerImage.color = new Color(1f, 1f, 1f, 0.5f);
+                flowerImage.color = Color.white; // full color now, stages handle the visual
+                UpdateGrowthSprite();
                 break;
 
             case PlotState.Bloomed:
                 flowerImage.enabled = true;
-                flowerImage.sprite = currentFlower?.icon;
                 flowerImage.color = Color.white;
+                // Use the bloomed stage sprite
+                var bloomed = FlowerSpriteInitializer.GetStageSprite(
+                    currentFlower?.name, 1f);
+                if (bloomed != null)
+                {
+                    flowerImage.sprite = bloomed;
+                    lastStageSprite = bloomed;
+                }
+                else if (currentFlower != null)
+                {
+                    flowerImage.sprite = currentFlower.icon;
+                }
                 if (progressFill != null) progressFill.fillAmount = 1f;
                 break;
         }

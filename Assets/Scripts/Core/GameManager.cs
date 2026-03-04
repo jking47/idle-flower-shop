@@ -28,6 +28,8 @@ public class GameManager : MonoBehaviour
 
     public GamePhase CurrentPhase => currentPhase;
 
+    bool suppressPhaseEvents;
+
     /// <summary>
     /// Used by SaveSystem to restore phase. Does not fire events.
     /// </summary>
@@ -51,18 +53,20 @@ public class GameManager : MonoBehaviour
         Services.Register(this);
     }
 
-    void Start()
+   void Start()
     {
-        // Try loading existing save first
+        suppressPhaseEvents = true;
+
         var save = Services.Get<SaveSystem>();
         bool loaded = save != null && save.Load();
 
-        // Only grant starting resources on fresh game
         if (!loaded)
         {
             var currency = Services.Get<CurrencyManager>();
             currency.Add(CurrencyType.Petals, startingPetals);
         }
+
+        suppressPhaseEvents = false;
     }
 
     void OnEnable()
@@ -80,8 +84,10 @@ public class GameManager : MonoBehaviour
         CheckPhaseProgression(evt);
     }
 
-    void CheckPhaseProgression(CurrencyChangedEvent evt)
+   void CheckPhaseProgression(CurrencyChangedEvent evt)
     {
+        if (suppressPhaseEvents) return;
+
         var currency = Services.Get<CurrencyManager>();
         if (currency == null) return;
 

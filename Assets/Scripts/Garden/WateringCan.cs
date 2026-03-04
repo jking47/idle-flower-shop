@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -35,9 +36,13 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
     float currentWater;
     bool isUnlocked;
     bool isDragging;
-    Vector3 restPosition;
     RectTransform rectTransform;
     CanvasGroup canvasGroup;
+    LayoutElement layoutElement;
+
+    // Dock references for reparenting during drag
+    Transform dockParent;
+    int dockSiblingIndex;
 
     // Track which plots are being watered this frame
     readonly HashSet<FlowerBed> wateredPlots = new();
@@ -52,17 +57,16 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
         currentWater = maxWater;
         rectTransform = GetComponent<RectTransform>();
 
-        // Add a CanvasGroup so we can make the icon pass-through for raycasts while dragging
         canvasGroup = GetComponent<CanvasGroup>();
         if (canvasGroup == null)
             canvasGroup = gameObject.AddComponent<CanvasGroup>();
 
-        gameObject.SetActive(false);
-    }
+        // LayoutElement lets us opt out of the dock's layout group during drag
+        layoutElement = GetComponent<LayoutElement>();
+        if (layoutElement == null)
+            layoutElement = gameObject.AddComponent<LayoutElement>();
 
-    void Start()
-    {
-        restPosition = rectTransform.position;
+        gameObject.SetActive(false);
     }
 
     void Update()
@@ -71,11 +75,9 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
 
         if (isDragging && currentWater > 0 && wateredPlots.Count > 0)
         {
-            // Drain water
             currentWater -= waterDrainRate * Time.deltaTime;
             currentWater = Mathf.Max(0, currentWater);
 
-            // Apply speed boost to watered plots
             foreach (var plot in wateredPlots)
             {
                 if (plot.State == PlotState.Growing)
@@ -87,7 +89,6 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
         }
         else if (!isDragging && currentWater < maxWater)
         {
-            // Refill when not in use
             currentWater += waterRefillRate * Time.deltaTime;
             currentWater = Mathf.Min(maxWater, currentWater);
         }
@@ -99,7 +100,6 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
     {
         isUnlocked = true;
         gameObject.SetActive(true);
-        restPosition = rectTransform.position;
     }
 
     // --- Drag Handlers ---
@@ -109,16 +109,21 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
         if (!isUnlocked || currentWater <= 0) return;
 
         isDragging = true;
-
-        // Let raycasts pass through the can to hit plots underneath
         canvasGroup.blocksRaycasts = false;
+
+        // Remember where we are in the dock
+        dockParent = rectTransform.parent;
+        dockSiblingIndex = rectTransform.GetSiblingIndex();
+
+        // Reparent to canvas root so the dock layout group stops fighting us
+        rectTransform.SetParent(parentCanvas != null ? parentCanvas.transform : dockParent.root, true);
+        rectTransform.SetAsLastSibling(); // render on top of everything
     }
 
     public void OnDrag(PointerEventData eventData)
     {
         if (!isDragging) return;
 
-        // Move the can icon to follow the pointer
         if (parentCanvas != null && parentCanvas.renderMode == RenderMode.ScreenSpaceOverlay)
         {
             rectTransform.position = eventData.position;
@@ -134,7 +139,6 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
             rectTransform.position = worldPoint;
         }
 
-        // Detect plots under the pointer
         CheckPlotsUnderPointer(eventData);
     }
 
@@ -143,24 +147,22 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
         isDragging = false;
         canvasGroup.blocksRaycasts = true;
 
-        // Clear all watering
         foreach (var plot in wateredPlots)
         {
             plot.SetWateringVisual(false);
         }
         wateredPlots.Clear();
 
-        // Return to rest position
-        rectTransform.position = restPosition;
+        // Reparent back to dock — layout group handles positioning automatically
+        rectTransform.SetParent(dockParent, false);
+        rectTransform.SetSiblingIndex(dockSiblingIndex);
     }
 
     void CheckPlotsUnderPointer(PointerEventData eventData)
     {
-        // Raycast to find all UI elements under the pointer
         var results = new List<RaycastResult>();
         EventSystem.current.RaycastAll(eventData, results);
 
-        // Track which plots are currently under the pointer
         var currentlyOver = new HashSet<FlowerBed>();
 
         foreach (var result in results)
@@ -177,7 +179,6 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
             }
         }
 
-        // Remove plots we're no longer over
         var toRemove = new List<FlowerBed>();
         foreach (var plot in wateredPlots)
         {
@@ -192,7 +193,6 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
             wateredPlots.Remove(plot);
         }
 
-        // Add new plots
         foreach (var plot in currentlyOver)
         {
             wateredPlots.Add(plot);
@@ -207,10 +207,8 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
         if (waterText != null)
             waterText.text = $"{currentWater:F0}/{maxWater:F0}";
 
-        // Dim the icon when empty
         if (canIcon != null)
         {
-            // Don't override the icon's color — only dim when empty
             Color c = canIcon.color;
             c.a = currentWater > 0 ? 1f : 0.4f;
             canIcon.color = c;
