@@ -38,6 +38,7 @@ public class TutorialManager : MonoBehaviour
         { "shop_unlocked",        "Your flower shop is open! Fill customer orders for coins." },
         { "social_intro",         "Visit the Social tab to see friends and collect gifts!" },
         { "gems_intro",           "Gems let you speed up growth and unlock premium flowers." },
+        { "store_ad",             "Low on petals? Visit the Store to watch an ad for free petals!" },
     };
 
     void Awake()
@@ -57,6 +58,7 @@ public class TutorialManager : MonoBehaviour
         EventBus.Subscribe<FlowerHarvestedEvent>(OnFlowerHarvested);
         EventBus.Subscribe<CurrencyChangedEvent>(OnCurrencyChanged);
         EventBus.Subscribe<PhaseUnlockedEvent>(OnPhaseUnlocked);
+        EventBus.Subscribe<UpgradePurchasedEvent>(OnUpgradePurchased);
     }
 
     void OnDisable()
@@ -66,6 +68,7 @@ public class TutorialManager : MonoBehaviour
         EventBus.Unsubscribe<FlowerHarvestedEvent>(OnFlowerHarvested);
         EventBus.Unsubscribe<CurrencyChangedEvent>(OnCurrencyChanged);
         EventBus.Unsubscribe<PhaseUnlockedEvent>(OnPhaseUnlocked);
+        EventBus.Unsubscribe<UpgradePurchasedEvent>(OnUpgradePurchased);
     }
 
     void Start()
@@ -102,7 +105,7 @@ public class TutorialManager : MonoBehaviour
         else if (harvestCount == 4)
             TryShowHint("instant_bloom");
         else if (harvestCount == 8)
-            TryShowHint("social_intro");
+            TryShowSocialHint();
     }
 
     void OnCurrencyChanged(CurrencyChangedEvent evt)
@@ -136,6 +139,33 @@ public class TutorialManager : MonoBehaviour
     {
         if (evt.phase == GamePhase.Shop)
             TryShowHint("shop_unlocked");
+
+        // Show social hint on Garden unlock if harvest threshold was
+        // already reached but hint was blocked by phase gate
+        if (evt.phase == GamePhase.Garden && harvestCount >= 8)
+            TryShowHint("social_intro");
+    }
+
+    void OnUpgradePurchased(UpgradePurchasedEvent evt)
+    {
+        // After buying an upgrade, check if player is low on petals
+        if (!Services.TryGet<CurrencyManager>(out var currency)) return;
+        double petals = currency.GetBalance(CurrencyType.Petals);
+
+        // If they can barely afford the cheapest flower, nudge them to the store
+        if (petals < 8)
+            TryShowHint("store_ad");
+    }
+
+    // --- Phase-Gated Hints ---
+
+    void TryShowSocialHint()
+    {
+        // Social button is only visible in Garden phase or later
+        if (!Services.TryGet<GameManager>(out var gm)) return;
+        if (gm.CurrentPhase < GamePhase.Garden) return;
+
+        TryShowHint("social_intro");
     }
 
     // --- Hint Display ---

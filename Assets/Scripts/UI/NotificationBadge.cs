@@ -6,7 +6,8 @@ public enum BadgeType
 {
     Upgrades,   // count of affordable upgrades
     Shop,       // count of fillable orders
-    Inventory   // shows when inventory has flowers (subtle reminder to sell)
+    Inventory,  // shows when inventory has flowers (subtle reminder to sell)
+    Store       // shows when player is stuck (can't afford to plant anything)
 }
 
 /// <summary>
@@ -41,6 +42,9 @@ public class NotificationBadge : MonoBehaviour
         EventBus.Subscribe<OrderExpiredEvent>(OnOrderExpired);
         EventBus.Subscribe<InventoryChangedEvent>(OnInventoryChanged);
         EventBus.Subscribe<PhaseUnlockedEvent>(OnPhaseUnlocked);
+        EventBus.Subscribe<FlowerPlantedEvent>(OnFlowerPlanted);
+        EventBus.Subscribe<FlowerHarvestedEvent>(OnFlowerHarvested);
+        EventBus.Subscribe<FlowerBloomedEvent>(OnFlowerBloomed);
     }
 
     void OnDisable()
@@ -52,6 +56,9 @@ public class NotificationBadge : MonoBehaviour
         EventBus.Unsubscribe<OrderExpiredEvent>(OnOrderExpired);
         EventBus.Unsubscribe<InventoryChangedEvent>(OnInventoryChanged);
         EventBus.Unsubscribe<PhaseUnlockedEvent>(OnPhaseUnlocked);
+        EventBus.Unsubscribe<FlowerPlantedEvent>(OnFlowerPlanted);
+        EventBus.Unsubscribe<FlowerHarvestedEvent>(OnFlowerHarvested);
+        EventBus.Unsubscribe<FlowerBloomedEvent>(OnFlowerBloomed);
     }
 
     void Start()
@@ -68,6 +75,9 @@ public class NotificationBadge : MonoBehaviour
     void OnOrderExpired(OrderExpiredEvent e) => Refresh();
     void OnInventoryChanged(InventoryChangedEvent e) => Refresh();
     void OnPhaseUnlocked(PhaseUnlockedEvent e) => Refresh();
+    void OnFlowerPlanted(FlowerPlantedEvent e) => Refresh();
+    void OnFlowerHarvested(FlowerHarvestedEvent e) => Refresh();
+    void OnFlowerBloomed(FlowerBloomedEvent e) => Refresh();
 
     // --- Badge Logic ---
 
@@ -78,6 +88,7 @@ public class NotificationBadge : MonoBehaviour
             BadgeType.Upgrades => CountAffordableUpgrades(),
             BadgeType.Shop => CountFillableOrders(),
             BadgeType.Inventory => CountInventoryFlowers(),
+            BadgeType.Store => CheckPlayerStuck(),
             _ => 0
         };
 
@@ -142,6 +153,38 @@ public class NotificationBadge : MonoBehaviour
         foreach (var kvp in inv.GetAllStock())
             total += kvp.Value;
         return total > 0 ? 1 : 0; // just show dot, not count
+    }
+
+    int CheckPlayerStuck()
+    {
+        // Show badge when player can't afford to plant any flower
+        if (!Services.TryGet<CurrencyManager>(out var currency)) return 0;
+        if (!Services.TryGet<GardenManager>(out var garden)) return 0;
+
+        double petals = currency.GetBalance(CurrencyType.Petals);
+
+        // Check if any flower is affordable
+        bool canPlantAnything = false;
+        foreach (var flower in garden.AvailableFlowers)
+        {
+            if (petals >= flower.plantCost)
+            {
+                canPlantAnything = true;
+                break;
+            }
+        }
+
+        if (canPlantAnything) return 0;
+
+        // Check if any plots are growing or bloomed (not truly stuck)
+        foreach (var plot in garden.Plots)
+        {
+            if (plot.State == PlotState.Growing || plot.State == PlotState.Bloomed)
+                return 0;
+        }
+
+        // Player has no petals, nothing growing — they're stuck
+        return 1;
     }
 
     // --- Build UI ---

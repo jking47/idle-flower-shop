@@ -68,7 +68,10 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
         if (layoutElement == null)
             layoutElement = gameObject.AddComponent<LayoutElement>();
 
-        gameObject.SetActive(false);
+        // Hide the entire dock until unlocked (dock must start enabled
+        // in inspector so this Awake runs and Services.Register happens)
+        if (transform.parent != null)
+            transform.parent.gameObject.SetActive(false);
     }
 
     void OnEnable()
@@ -112,6 +115,9 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
     public void Unlock()
     {
         isUnlocked = true;
+        // Show the dock first, then the can
+        if (transform.parent != null)
+            transform.parent.gameObject.SetActive(true);
         gameObject.SetActive(true);
         RefreshCapacity();
     }

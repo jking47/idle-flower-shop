@@ -11,7 +11,7 @@ public class MockStoreService : MonoBehaviour, IStoreService
 {
     [Header("Products")]
     [SerializeField] float purchaseDelay = 1.0f;
-    [SerializeField] float adDuration = 3.0f;
+    [SerializeField] float adDuration = 7.0f;
 
     readonly List<StoreProduct> products = new()
     {
@@ -66,7 +66,12 @@ public class MockStoreService : MonoBehaviour, IStoreService
 
     public void WatchAd(string placement, Action<bool> callback)
     {
-        StartCoroutine(SimulateAd(placement, callback));
+        // Show the fake ad overlay instead of a silent wait
+        AdSimulator.Show(this, adDuration, () =>
+        {
+            Debug.Log($"[Store] Ad complete for: {placement}");
+            callback?.Invoke(true);
+        });
     }
 
     IEnumerator SimulatePurchase(string productId, Action<bool, string> callback)
@@ -88,14 +93,5 @@ public class MockStoreService : MonoBehaviour, IStoreService
 
         Debug.Log($"[Store] Mock purchase: {product.displayName} ({product.priceString}) → +{product.gemAmount} gems");
         callback?.Invoke(true, "Purchase successful!");
-    }
-
-    IEnumerator SimulateAd(string placement, Action<bool> callback)
-    {
-        Debug.Log($"[Store] Simulating ad for placement: {placement}");
-        yield return new WaitForSeconds(adDuration);
-
-        Debug.Log($"[Store] Ad complete for: {placement}");
-        callback?.Invoke(true);
     }
 }
