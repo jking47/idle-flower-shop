@@ -12,12 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7f5a5d17f23e797c2902c30a059e7279, type: 3}
   m_Name: MixedFlowers
   m_EditorClassIdentifier: Assembly-CSharp::OrderData
-  displayName: Bouquet Order
+  displayName: Going Daisy!
   requirements:
   - flower: {fileID: 11400000, guid: fe77d322f63baa5d4a73cb4ab4da7ddf, type: 2}
-    count: 2
-  - flower: {fileID: 11400000, guid: 1c201de6e24bd28e5b639741783a952c, type: 2}
-    count: 2
-  baseCoinReward: 50
-  timeLimit: 90
+    count: 6
+  baseCoinReward: 10
+  timeLimit: 120
   minShopLevel: 0

@@ -115,7 +115,7 @@ public class UpgradePanel : MonoBehaviour, IPanel
             {
                 nameText.text = upgrade.displayName;
                 if (!string.IsNullOrEmpty(upgrade.description) && !maxed && prereqsMet)
-                    nameText.text += $"\n<size=12><color=#8899AA>{upgrade.description}</color></size>";
+                    nameText.text += $"\n<size=20><color=#8899AA>{upgrade.description}</color></size>";
             }
 
             // Level text
@@ -209,7 +209,7 @@ public class UpgradePanel : MonoBehaviour, IPanel
 
         var tmp = arrowGo.AddComponent<TextMeshProUGUI>();
         tmp.text = "\u25B2"; // up triangle — points to prerequisite above
-        tmp.fontSize = 12;
+        tmp.fontSize = 20;
         tmp.color = lockedTextColor;
         tmp.alignment = TextAlignmentOptions.Center;
         tmp.enableWordWrapping = false;

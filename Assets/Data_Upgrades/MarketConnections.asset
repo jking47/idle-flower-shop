@@ -13,8 +13,7 @@ MonoBehaviour:
   m_Name: MarketConnections
   m_EditorClassIdentifier: Assembly-CSharp::UpgradeData
   displayName: Market Connections
-  description: Increases the Sell Value of your flowers, increasing the amount of
-    Coins you get from completing Orders.
+  description: Increase the amount of coins you get from completing Orders
   icon: {fileID: 0}
   upgradeType: 4
   costCurrency: 0

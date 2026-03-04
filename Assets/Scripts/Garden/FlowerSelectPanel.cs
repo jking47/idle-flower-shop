@@ -97,7 +97,10 @@ public class FlowerSelectPanel : MonoBehaviour, IPanel
                 nameText.text = flower.displayName;
 
             if (costText != null)
-                costText.text = flower.plantCost > 0 ? $"{flower.plantCost:F0} petals" : "Free";
+            {
+                string cost = flower.plantCost > 0 ? $"Cost: {flower.plantCost:F0} petals" : "Free";
+                costText.text = $"{cost}\n<size=22><color=#8899AA>Yield: +{flower.baseYield:F0} | Grow: {flower.growTime:F0}s</color></size>";
+            }
 
             bool canAfford = currency.CanAfford(CurrencyType.Petals, flower.plantCost) || flower.plantCost <= 0;
 
