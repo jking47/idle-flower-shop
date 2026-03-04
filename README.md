@@ -22,5 +22,4 @@ A systems-driven idle game built in Unity as a game design portfolio piece.
 - Interface-based services with mock implementations (IStoreService, ISocialService)
 
 ## Built With
-Unity 6, C#, TextMeshPro, WebGL
-EOF
+Unity 6, C#, WebGL
