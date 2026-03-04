@@ -9,7 +9,7 @@ A systems-driven idle game built in Unity as a game design portfolio piece.
 - **Phase Progression** — Patch → Garden → Shop → Business, each introducing new mechanics
 - **Dynamic Market** — Supply/demand pricing with sell pressure and periodic demand shifts
 - **Order Fulfillment** — Timed customer orders with market-adjusted rewards
-- **Upgrade System** — Data-driven ScriptableObject upgrades with exponential cost curves
+- **Upgrade System** — Data-driven ScriptableObject upgrades with easily customizable cost curves
 - **Idle + Active Hybrid** — Auto-harvest idle income with active watering/harvesting for 2-3x efficiency
 - **Save System** — JSON + PlayerPrefs with offline progress calculation
 - **Mock Monetization** — Simulated IAP store and ad-for-reward using interface-based services (IStoreService)
