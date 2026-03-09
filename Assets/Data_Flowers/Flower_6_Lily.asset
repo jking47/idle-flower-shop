@@ -13,13 +13,13 @@ MonoBehaviour:
   m_Name: Flower_6_Lily
   m_EditorClassIdentifier: Assembly-CSharp::FlowerData
   displayName: Lily
-  description: Don't let your cat eat this!
+  description: Worth the wait — high yield AND the best raw sell value
   rarity: 3
   icon: {fileID: 0}
   growTime: 90
-  baseYield: 100
+  baseYield: 90
   plantCost: 50
-  baseSellValue: 50
+  baseSellValue: 60
   requiredPhase: 2
-  unlockCost: -1
+  unlockCost: 1500
   socialExclusive: 0

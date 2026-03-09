@@ -7,7 +7,8 @@ public enum BadgeType
     Upgrades,   // count of affordable upgrades
     Shop,       // count of fillable orders
     Inventory,  // shows when inventory has flowers (subtle reminder to sell)
-    Store       // shows when player is stuck (can't afford to plant anything)
+    Store,      // shows when player is stuck (can't afford to plant, nothing growing)
+    WatchAd     // shows when player can't afford any flower (softer than Store — fires even while flowers are growing)
 }
 
 /// <summary>
@@ -27,6 +28,7 @@ public class NotificationBadge : MonoBehaviour
     GameObject badgeObj;
     TMP_Text countText;
     Image badgeImage;
+    bool started;
 
     void Awake()
     {
@@ -35,6 +37,10 @@ public class NotificationBadge : MonoBehaviour
 
     void OnEnable()
     {
+        // Only refresh if Start() has already run — avoids calling into services
+        // before they're initialized on the first enable during scene load.
+        if (started) Refresh();
+
         EventBus.Subscribe<CurrencyChangedEvent>(OnCurrencyChanged);
         EventBus.Subscribe<UpgradePurchasedEvent>(OnUpgradePurchased);
         EventBus.Subscribe<OrderSpawnedEvent>(OnOrderSpawned);
@@ -63,21 +69,71 @@ public class NotificationBadge : MonoBehaviour
 
     void Start()
     {
+        started = true;
         Refresh();
     }
 
-    // --- Event handlers — all just trigger a refresh ---
+    // --- Event handlers — refresh only when the event is relevant to this badge type ---
 
-    void OnCurrencyChanged(CurrencyChangedEvent e) => Refresh();
-    void OnUpgradePurchased(UpgradePurchasedEvent e) => Refresh();
-    void OnOrderSpawned(OrderSpawnedEvent e) => Refresh();
-    void OnOrderFilled(OrderFilledEvent e) => Refresh();
-    void OnOrderExpired(OrderExpiredEvent e) => Refresh();
-    void OnInventoryChanged(InventoryChangedEvent e) => Refresh();
-    void OnPhaseUnlocked(PhaseUnlockedEvent e) => Refresh();
-    void OnFlowerPlanted(FlowerPlantedEvent e) => Refresh();
-    void OnFlowerHarvested(FlowerHarvestedEvent e) => Refresh();
-    void OnFlowerBloomed(FlowerBloomedEvent e) => Refresh();
+    void OnCurrencyChanged(CurrencyChangedEvent e)
+    {
+        // Upgrades badge: affordability changes when currency changes
+        // Store/WatchAd badge: stuck/low-petal check depends on petal balance
+        if (badgeType == BadgeType.Upgrades ||
+            badgeType == BadgeType.Store    ||
+            badgeType == BadgeType.WatchAd)
+            Refresh();
+    }
+
+    void OnUpgradePurchased(UpgradePurchasedEvent e)
+    {
+        if (badgeType == BadgeType.Upgrades) Refresh();
+    }
+
+    void OnOrderSpawned(OrderSpawnedEvent e)
+    {
+        if (badgeType == BadgeType.Shop) Refresh();
+    }
+
+    void OnOrderFilled(OrderFilledEvent e)
+    {
+        if (badgeType == BadgeType.Shop) Refresh();
+    }
+
+    void OnOrderExpired(OrderExpiredEvent e)
+    {
+        if (badgeType == BadgeType.Shop) Refresh();
+    }
+
+    void OnInventoryChanged(InventoryChangedEvent e)
+    {
+        if (badgeType == BadgeType.Shop      ||
+            badgeType == BadgeType.Inventory)
+            Refresh();
+    }
+
+    void OnPhaseUnlocked(PhaseUnlockedEvent e)
+    {
+        if (badgeType == BadgeType.Upgrades) Refresh();
+    }
+
+    void OnFlowerPlanted(FlowerPlantedEvent e)
+    {
+        if (badgeType == BadgeType.Store || badgeType == BadgeType.WatchAd) Refresh();
+    }
+
+    void OnFlowerHarvested(FlowerHarvestedEvent e)
+    {
+        if (badgeType == BadgeType.Inventory ||
+            badgeType == BadgeType.Store     ||
+            badgeType == BadgeType.WatchAd)
+            Refresh();
+    }
+
+    void OnFlowerBloomed(FlowerBloomedEvent e)
+    {
+        if (badgeType == BadgeType.Store || badgeType == BadgeType.WatchAd) Refresh();
+    }
 
     // --- Badge Logic ---
 
@@ -86,10 +142,11 @@ public class NotificationBadge : MonoBehaviour
         int count = badgeType switch
         {
             BadgeType.Upgrades => CountAffordableUpgrades(),
-            BadgeType.Shop => CountFillableOrders(),
+            BadgeType.Shop     => CountFillableOrders(),
             BadgeType.Inventory => CountInventoryFlowers(),
-            BadgeType.Store => CheckPlayerStuck(),
-            _ => 0
+            BadgeType.Store    => CheckPlayerStuck(),
+            BadgeType.WatchAd  => CheckLowPetals(),
+            _                  => 0
         };
 
         bool show = count > 0;
@@ -126,6 +183,8 @@ public class NotificationBadge : MonoBehaviour
         if (!Services.TryGet<ShopManager>(out var shop)) return 0;
         if (!Services.TryGet<InventoryManager>(out var inv)) return 0;
 
+        if (shop.Slots == null) return 0;
+
         int count = 0;
         foreach (var order in shop.Slots)
         {
@@ -134,7 +193,7 @@ public class NotificationBadge : MonoBehaviour
             bool canFill = true;
             foreach (var req in order.data.requirements)
             {
-                if (req.flower == null || inv.GetCount(req.flower.name) < req.count)
+                if (req == null || req.flower == null || inv.GetCount(req.flower.name) < req.count)
                 {
                     canFill = false;
                     break;
@@ -184,6 +243,24 @@ public class NotificationBadge : MonoBehaviour
         }
 
         // Player has no petals, nothing growing — they're stuck
+        return 1;
+    }
+
+    int CheckLowPetals()
+    {
+        // Show badge when the player can't afford to plant any flower,
+        // regardless of whether things are still growing. Softer than
+        // CheckPlayerStuck — intended for the watch-ad button inside the store.
+        if (!Services.TryGet<CurrencyManager>(out var currency)) return 0;
+        if (!Services.TryGet<GardenManager>(out var garden)) return 0;
+
+        double petals = currency.GetBalance(CurrencyType.Petals);
+        foreach (var flower in garden.AvailableFlowers)
+        {
+            if (petals >= flower.plantCost)
+                return 0;
+        }
+
         return 1;
     }
 

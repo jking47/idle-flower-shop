@@ -13,13 +13,13 @@ MonoBehaviour:
   m_Name: Flower_2_Bluebell
   m_EditorClassIdentifier: Assembly-CSharp::FlowerData
   displayName: Bluebell
-  description: A beautiful blue flower
+  description: Grows in clusters — best raw petal yield per second
   rarity: 1
   icon: {fileID: 0}
   growTime: 15
-  baseYield: 8
-  plantCost: 5
-  baseSellValue: 5
+  baseYield: 20
+  plantCost: 8
+  baseSellValue: 3
   requiredPhase: 0
   unlockCost: -1
   socialExclusive: 0

@@ -34,6 +34,8 @@ public class ShopManager : MonoBehaviour
     [Header("Reward Tuning")]
     [Tooltip("Multiplier on top of market value. Rewards bundling flowers into orders vs selling raw.")]
     [SerializeField] float orderBonusMultiplier = 1.25f;
+    [Tooltip("Renown awarded per filled order.")]
+    [SerializeField] double renownPerOrder = 2;
 
     bool shopOpen;
     int maxActiveOrders;
@@ -42,6 +44,11 @@ public class ShopManager : MonoBehaviour
 
     public IReadOnlyList<ActiveOrder> Slots => slots;
     public int MaxActiveOrders => maxActiveOrders;
+
+    /// <summary>
+    /// Seconds until the next order attempts to spawn. -1 if shop is not yet open.
+    /// </summary>
+    public float TimeUntilNextSpawn => shopOpen ? Mathf.Max(0f, spawnIntervalSeconds - spawnTimer) : -1f;
 
     void Awake()
     {
@@ -66,8 +73,8 @@ public class ShopManager : MonoBehaviour
         ApplyOrderSlotUpgrade();
         slots = new ActiveOrder[absoluteMaxSlots];
 
-        if (GameManager.Instance != null &&
-            GameManager.Instance.CurrentPhase >= GamePhase.Shop)
+        if (Services.TryGet<GameManager>(out var gm) &&
+            gm.CurrentPhase >= GamePhase.Shop)
             OpenShop();
     }
 
@@ -133,9 +140,11 @@ public class ShopManager : MonoBehaviour
         }
 
         double reward = CalculateReward(order, market);
-        Services.Get<CurrencyManager>()?.Add(CurrencyType.Coins, reward);
+        var currencyManager = Services.Get<CurrencyManager>();
+        currencyManager?.Add(CurrencyType.Coins, reward);
+        currencyManager?.Add(CurrencyType.Renown, renownPerOrder);
 
-        Debug.Log($"[Shop] Order '{order.data.displayName}' filled for {reward:0} coins.");
+        Debug.Log($"[Shop] Order '{order.data.displayName}' filled for {reward:0} coins (+{renownPerOrder} renown).");
 
         EventBus.Publish(new OrderFilledEvent
         {
@@ -145,7 +154,7 @@ public class ShopManager : MonoBehaviour
         });
 
         slots[slotIndex] = null;
-        TrySpawnOrder();
+        FillAllEmptySlots();
         return true;
     }
 
@@ -171,8 +180,14 @@ public class ShopManager : MonoBehaviour
     void OpenShop()
     {
         shopOpen = true;
-        TrySpawnOrder();
+        FillAllEmptySlots();
         Debug.Log("[Shop] Shop is open.");
+    }
+
+    void FillAllEmptySlots()
+    {
+        for (int i = 0; i < maxActiveOrders; i++)
+            TrySpawnOrder();
     }
 
     void TrySpawnOrder()
@@ -222,12 +237,33 @@ public class ShopManager : MonoBehaviour
 
     OrderData PickOrder()
     {
+        int currentPhase = Services.TryGet<GameManager>(out var gm) ? (int)gm.CurrentPhase : 0;
+
+        // Collect IDs of orders already active to avoid duplicates
+        var activeIds = new System.Collections.Generic.HashSet<string>();
+        for (int i = 0; i < maxActiveOrders; i++)
+        {
+            if (slots[i] != null)
+                activeIds.Add(slots[i].data.displayName);
+        }
+
         var eligible = new List<OrderData>(orderPool.Count);
         foreach (var o in orderPool)
         {
-            if (o != null && o.minShopLevel <= 0)
+            if (o != null && o.minShopLevel <= currentPhase && !activeIds.Contains(o.displayName))
                 eligible.Add(o);
         }
+
+        // Fall back to all phase-eligible orders if dedup left nothing
+        if (eligible.Count == 0)
+        {
+            foreach (var o in orderPool)
+            {
+                if (o != null && o.minShopLevel <= currentPhase)
+                    eligible.Add(o);
+            }
+        }
+
         return eligible.Count > 0 ? eligible[Random.Range(0, eligible.Count)] : null;
     }
 
@@ -243,6 +279,6 @@ public class ShopManager : MonoBehaviour
 
         // If we gained a slot, try to fill it immediately
         if (maxActiveOrders > oldMax && shopOpen)
-            TrySpawnOrder();
+            FillAllEmptySlots();
     }
 }

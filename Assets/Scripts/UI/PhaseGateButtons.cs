@@ -36,8 +36,8 @@ public class HUDPhaseGate : MonoBehaviour
 
     void Refresh()
     {
-        var phase = GameManager.Instance != null
-            ? GameManager.Instance.CurrentPhase
+        var phase = Services.TryGet<GameManager>(out var gm)
+            ? gm.CurrentPhase
             : GamePhase.Patch;
 
         if (shopButton != null)

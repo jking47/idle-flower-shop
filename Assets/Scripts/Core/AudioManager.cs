@@ -30,6 +30,7 @@ public class AudioManager : MonoBehaviour
     int currentTrackIndex = -1;
     bool sourceAActive = true;
     bool isMuted;
+    bool autoAdvance = true;
     Coroutine fadeRoutine;
 
     AudioSource ActiveSource => sourceAActive ? bgmSourceA : bgmSourceB;
@@ -148,9 +149,18 @@ public class AudioManager : MonoBehaviour
         fadeRoutine = null;
     }
 
+    void Update()
+    {
+        if (!autoAdvance || fadeRoutine != null) return;
+        if (bgmTracks == null || bgmTracks.Length <= 1) return;
+        if (currentTrackIndex < 0) return;
+        if (!ActiveSource.isPlaying)
+            PlayNextTrack();
+    }
+
     void ConfigureSource(AudioSource source)
     {
-        source.loop = true;
+        source.loop = false;
         source.playOnAwake = false;
         source.volume = 0f;
         source.spatialBlend = 0f; // 2D audio

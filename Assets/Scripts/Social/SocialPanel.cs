@@ -44,6 +44,10 @@ public class SocialPanel : MonoBehaviour, IPanel
     readonly List<GameObject> spawnedItems = new();
     ISocialService social;
 
+    // Achievements tab — built programmatically; no extra inspector fields needed
+    GameObject achievementsContent;
+    Button achievementsTabButton;
+
     void Awake()
     {
         Services.Register(this);
@@ -51,10 +55,14 @@ public class SocialPanel : MonoBehaviour, IPanel
         if (openButton != null) openButton.onClick.AddListener(Open);
         if (closeButton != null) closeButton.onClick.AddListener(Close);
 
+        gameObject.AddComponent<PanelTransition>();
+
         if (friendsTabButton != null) friendsTabButton.onClick.AddListener(() => ShowTab("friends"));
         if (leaderboardTabButton != null) leaderboardTabButton.onClick.AddListener(() => ShowTab("leaderboard"));
         if (giftsTabButton != null) giftsTabButton.onClick.AddListener(() => ShowTab("gifts"));
         if (communityTabButton != null) communityTabButton.onClick.AddListener(() => ShowTab("community"));
+
+        BuildAchievementsTab();
 
         gameObject.SetActive(false);
     }
@@ -87,17 +95,19 @@ public class SocialPanel : MonoBehaviour, IPanel
     {
         ClearSpawned();
 
-        if (friendsContent != null) friendsContent.SetActive(tab == "friends");
-        if (leaderboardContent != null) leaderboardContent.SetActive(tab == "leaderboard");
-        if (giftsContent != null) giftsContent.SetActive(tab == "gifts");
-        if (communityContent != null) communityContent.SetActive(tab == "community");
+        if (friendsContent != null)      friendsContent.SetActive(tab == "friends");
+        if (leaderboardContent != null)  leaderboardContent.SetActive(tab == "leaderboard");
+        if (giftsContent != null)        giftsContent.SetActive(tab == "gifts");
+        if (communityContent != null)    communityContent.SetActive(tab == "community");
+        if (achievementsContent != null) achievementsContent.SetActive(tab == "achievements");
 
         switch (tab)
         {
-            case "friends": PopulateFriends(); break;
-            case "leaderboard": PopulateLeaderboard(); break;
-            case "gifts": PopulateGifts(); break;
-            case "community": PopulateCommunity(); break;
+            case "friends":      PopulateFriends();      break;
+            case "leaderboard":  PopulateLeaderboard();  break;
+            case "gifts":        PopulateGifts();        break;
+            case "community":    PopulateCommunity();    break;
+            case "achievements": PopulateAchievements(); break;
         }
     }
 
@@ -185,6 +195,11 @@ public class SocialPanel : MonoBehaviour, IPanel
                 return;
             }
 
+            // Look up flowers once for matching by displayName
+            List<FlowerData> availableFlowers = null;
+            if (Services.TryGet<GardenManager>(out var garden))
+                availableFlowers = new List<FlowerData>(garden.AvailableFlowers);
+
             foreach (var gift in gifts)
             {
                 var obj = Instantiate(giftEntryPrefab, giftsListContainer);
@@ -195,6 +210,15 @@ public class SocialPanel : MonoBehaviour, IPanel
 
                 if (nameText != null) nameText.text = $"From {gift.fromName}";
                 if (detailText != null) detailText.text = $"{gift.flowerName} seed";
+
+                // Add gifted flower to inventory
+                if (availableFlowers != null && Services.TryGet<InventoryManager>(out var inv))
+                {
+                    var flower = availableFlowers.Find(
+                        f => f.displayName == gift.flowerName || f.name == gift.flowerName);
+                    if (flower != null)
+                        inv.Add(flower.name, 1);
+                }
             }
 
             if (giftNotificationBadge != null)
@@ -218,6 +242,184 @@ public class SocialPanel : MonoBehaviour, IPanel
                 if (timeText != null) timeText.text = FormatTimeAgo(entry.timestamp);
             }
         });
+    }
+
+    // --- Achievements Tab ---
+
+    void BuildAchievementsTab()
+    {
+        // --- Tab button: clone community button for matching style, relabel it ---
+        if (communityTabButton == null) return;
+
+        achievementsTabButton = Instantiate(communityTabButton, communityTabButton.transform.parent);
+        achievementsTabButton.name = "AchievementsTabButton";
+        var label = achievementsTabButton.GetComponentInChildren<TMP_Text>();
+        if (label != null) label.text = "Medals";
+        achievementsTabButton.onClick.RemoveAllListeners();
+        achievementsTabButton.onClick.AddListener(() => ShowTab("achievements"));
+
+        // --- Content panel: fresh GameObject, same parent/size as communityContent ---
+        if (communityContent == null) return;
+
+        var panelGo = new GameObject("AchievementsContent");
+        var panelRt = panelGo.AddComponent<RectTransform>();
+        panelRt.SetParent(communityContent.transform.parent, false);
+
+        // Match community content's rect exactly
+        var srcRt = communityContent.GetComponent<RectTransform>();
+        panelRt.anchorMin        = srcRt.anchorMin;
+        panelRt.anchorMax        = srcRt.anchorMax;
+        panelRt.anchoredPosition = srcRt.anchoredPosition;
+        panelRt.sizeDelta        = srcRt.sizeDelta;
+        panelRt.pivot            = srcRt.pivot;
+
+        achievementsContent = panelGo;
+
+        // --- Scroll view inside the panel ---
+        var scrollRt = new GameObject("Scroll").AddComponent<RectTransform>();
+        scrollRt.SetParent(panelRt, false);
+        scrollRt.anchorMin = Vector2.zero;
+        scrollRt.anchorMax = Vector2.one;
+        scrollRt.offsetMin = Vector2.zero;
+        scrollRt.offsetMax = Vector2.zero;
+
+        var sv = scrollRt.gameObject.AddComponent<ScrollRect>();
+        sv.horizontal = false;
+
+        var viewportRt = new GameObject("Viewport").AddComponent<RectTransform>();
+        viewportRt.SetParent(scrollRt, false);
+        viewportRt.anchorMin = Vector2.zero;
+        viewportRt.anchorMax = Vector2.one;
+        viewportRt.offsetMin = Vector2.zero;
+        viewportRt.offsetMax = Vector2.zero;
+        viewportRt.gameObject.AddComponent<Image>().color = Color.white;
+        viewportRt.gameObject.AddComponent<Mask>().showMaskGraphic = false;
+        sv.viewport = viewportRt;
+
+        var contentRt = new GameObject("Content").AddComponent<RectTransform>();
+        contentRt.SetParent(viewportRt, false);
+        contentRt.anchorMin = new Vector2(0f, 1f);
+        contentRt.anchorMax = new Vector2(1f, 1f);
+        contentRt.pivot     = new Vector2(0.5f, 1f);
+        contentRt.sizeDelta = Vector2.zero;
+        sv.content = contentRt;
+
+        var vlg = contentRt.gameObject.AddComponent<VerticalLayoutGroup>();
+        vlg.spacing              = 6f;
+        vlg.padding              = new RectOffset(8, 8, 8, 8);
+        vlg.childControlWidth    = true;
+        vlg.childControlHeight   = false;
+        vlg.childForceExpandWidth  = true;
+        vlg.childForceExpandHeight = false;
+
+        contentRt.gameObject.AddComponent<ContentSizeFitter>().verticalFit =
+            ContentSizeFitter.FitMode.PreferredSize;
+
+        achievementsContent.SetActive(false);
+    }
+
+    void PopulateAchievements()
+    {
+        var scroll = achievementsContent.GetComponentInChildren<ScrollRect>();
+        Transform container = scroll != null ? (Transform)scroll.content : achievementsContent.transform;
+
+        // Works even if AchievementManager isn't attached yet — just shows all as locked
+        var completed = Services.TryGet<AchievementManager>(out var mgr)
+            ? new HashSet<int>(mgr.GetSaveData())
+            : new HashSet<int>();
+
+        foreach (var milestone in AchievementManager.AllMilestones)
+        {
+            bool done = completed.Contains((int)milestone.Id);
+
+            const float rowH = 90f;
+
+            var row = new GameObject("AchRow");
+            var rowRt = row.AddComponent<RectTransform>();
+            rowRt.SetParent(container, false);
+            rowRt.sizeDelta = new Vector2(0f, rowH);
+            spawnedItems.Add(row);
+
+            var le = row.AddComponent<LayoutElement>();
+            le.preferredHeight = rowH;
+            le.flexibleWidth   = 1f;
+
+            var bg = row.AddComponent<Image>();
+            bg.color = done
+                ? new Color(0.18f, 0.28f, 0.18f, 0.9f)
+                : new Color(0.18f, 0.20f, 0.26f, 0.7f);
+
+            var outline = row.AddComponent<Outline>();
+            outline.effectColor = done
+                ? new Color(0.4f, 0.75f, 0.4f, 0.6f)
+                : new Color(0.3f, 0.35f, 0.45f, 0.5f);
+            outline.effectDistance = new Vector2(1, -1);
+
+            // Check / lock icon
+            var iconGo = new GameObject("Icon");
+            var iconRt = iconGo.AddComponent<RectTransform>();
+            iconRt.SetParent(rowRt, false);
+            iconRt.anchorMin        = new Vector2(0f, 0.5f);
+            iconRt.anchorMax        = new Vector2(0f, 0.5f);
+            iconRt.pivot            = new Vector2(0f, 0.5f);
+            iconRt.anchoredPosition = new Vector2(10f, 0f);
+            iconRt.sizeDelta        = new Vector2(44f, 44f);
+            var iconText = iconGo.AddComponent<TextMeshProUGUI>();
+            iconText.text      = done ? "✓" : "○";
+            iconText.fontSize  = 30;
+            iconText.color     = done ? new Color(0.4f, 0.9f, 0.4f) : new Color(0.4f, 0.45f, 0.55f);
+            iconText.alignment = TextAlignmentOptions.Center;
+            iconText.raycastTarget = false;
+
+            // Title
+            var titleGo = new GameObject("Title");
+            var titleRt = titleGo.AddComponent<RectTransform>();
+            titleRt.SetParent(rowRt, false);
+            titleRt.anchorMin = new Vector2(0f, 0.5f);
+            titleRt.anchorMax = new Vector2(0.72f, 1f);
+            titleRt.offsetMin = new Vector2(60f, 2f);
+            titleRt.offsetMax = new Vector2(-4f, -6f);
+            var titleTmp = titleGo.AddComponent<TextMeshProUGUI>();
+            titleTmp.text              = milestone.Title;
+            titleTmp.fontSize          = 24;
+            titleTmp.color             = done ? Color.white : new Color(0.55f, 0.6f, 0.65f);
+            titleTmp.enableWordWrapping = false;
+            titleTmp.overflowMode      = TextOverflowModes.Ellipsis;
+            titleTmp.alignment         = TextAlignmentOptions.BottomLeft;
+            titleTmp.raycastTarget     = false;
+
+            // Detail
+            var detailGo = new GameObject("Detail");
+            var detailRt = detailGo.AddComponent<RectTransform>();
+            detailRt.SetParent(rowRt, false);
+            detailRt.anchorMin = new Vector2(0f, 0f);
+            detailRt.anchorMax = new Vector2(0.72f, 0.5f);
+            detailRt.offsetMin = new Vector2(60f, 6f);
+            detailRt.offsetMax = new Vector2(-4f, 0f);
+            var detailTmp = detailGo.AddComponent<TextMeshProUGUI>();
+            detailTmp.text              = milestone.Detail;
+            detailTmp.fontSize          = 19;
+            detailTmp.color             = new Color(0.6f, 0.65f, 0.7f);
+            detailTmp.enableWordWrapping = false;
+            detailTmp.overflowMode      = TextOverflowModes.Ellipsis;
+            detailTmp.alignment         = TextAlignmentOptions.TopLeft;
+            detailTmp.raycastTarget     = false;
+
+            // Renown badge
+            var badgeGo = new GameObject("Renown");
+            var badgeRt = badgeGo.AddComponent<RectTransform>();
+            badgeRt.SetParent(rowRt, false);
+            badgeRt.anchorMin = new Vector2(0.72f, 0f);
+            badgeRt.anchorMax = new Vector2(1f, 1f);
+            badgeRt.offsetMin = new Vector2(4f, 10f);
+            badgeRt.offsetMax = new Vector2(-10f, -10f);
+            var badgeTmp = badgeGo.AddComponent<TextMeshProUGUI>();
+            badgeTmp.text      = $"+{milestone.Renown:F0}\n<size=16>renown</size>";
+            badgeTmp.fontSize  = 22;
+            badgeTmp.color     = done ? new Color(0.75f, 0.85f, 1f) : new Color(0.4f, 0.45f, 0.5f);
+            badgeTmp.alignment = TextAlignmentOptions.Center;
+            badgeTmp.raycastTarget = false;
+        }
     }
 
     void VisitFriend(string friendId)

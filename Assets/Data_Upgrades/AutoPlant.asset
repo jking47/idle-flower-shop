@@ -20,7 +20,7 @@ MonoBehaviour:
   costCurrency: 0
   effectPerLevel: 1
   maxLevel: 1
-  baseCost: 10
+  baseCost: 100
   costScaling: 1
   requiredPhase: 1
   prerequisites:

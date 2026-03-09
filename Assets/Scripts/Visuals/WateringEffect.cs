@@ -6,6 +6,8 @@ using UnityEngine.UI;
 /// Animated water droplet effect for flower beds.
 /// Spawns teardrop shapes that fall and fade.
 /// Attach to the WateringEffect child of each FlowerBed.
+///
+/// Uses an object pool (size = dropCount) — no per-frame allocations.
 /// </summary>
 public class WateringEffect : MonoBehaviour
 {
@@ -15,14 +17,43 @@ public class WateringEffect : MonoBehaviour
     [SerializeField] float dropLifetime = 0.7f;
     [SerializeField] float spreadX = 80f;
 
-    readonly List<RectTransform> drops = new();
-    readonly List<float> dropTimers = new();
+    // Pool
+    readonly List<RectTransform> pool = new();
+    readonly List<Image>         poolImgs = new();
+    readonly List<bool>          inUse = new();
+
+    // Active drop tracking
+    readonly List<int>   activeIndices = new();
+    readonly List<float> dropTimers    = new();
+
     float spawnTimer;
     Sprite dropSprite;
 
     void Awake()
     {
         dropSprite = CreateDropSprite();
+        BuildPool();
+    }
+
+    void BuildPool()
+    {
+        for (int i = 0; i < dropCount; i++)
+        {
+            var go = new GameObject("Drop");
+            var rt = go.AddComponent<RectTransform>();
+            rt.SetParent(transform, false);
+            rt.sizeDelta = new Vector2(12, 16);
+
+            var img = go.AddComponent<Image>();
+            img.sprite = dropSprite;
+            img.color = new Color(0.4f, 0.7f, 1f, 0.9f);
+            img.raycastTarget = false;
+
+            go.SetActive(false);
+            pool.Add(rt);
+            poolImgs.Add(img);
+            inUse.Add(false);
+        }
     }
 
     void OnEnable()
@@ -32,74 +63,74 @@ public class WateringEffect : MonoBehaviour
 
     void OnDisable()
     {
-        foreach (var d in drops)
+        // Return all active drops to the pool
+        for (int i = activeIndices.Count - 1; i >= 0; i--)
         {
-            if (d != null) Destroy(d.gameObject);
+            int idx = activeIndices[i];
+            pool[idx].gameObject.SetActive(false);
+            inUse[idx] = false;
         }
-        drops.Clear();
+        activeIndices.Clear();
         dropTimers.Clear();
     }
 
     void Update()
     {
         spawnTimer += Time.deltaTime;
-        if (spawnTimer >= spawnInterval && drops.Count < dropCount)
+        if (spawnTimer >= spawnInterval && activeIndices.Count < dropCount)
         {
             spawnTimer = 0f;
             SpawnDrop();
         }
 
-        for (int i = drops.Count - 1; i >= 0; i--)
+        for (int i = activeIndices.Count - 1; i >= 0; i--)
         {
-            if (drops[i] == null)
-            {
-                drops.RemoveAt(i);
-                dropTimers.RemoveAt(i);
-                continue;
-            }
+            int idx = activeIndices[i];
 
             dropTimers[i] += Time.deltaTime;
             float t = dropTimers[i] / dropLifetime;
 
             if (t >= 1f)
             {
-                Destroy(drops[i].gameObject);
-                drops.RemoveAt(i);
+                // Return to pool
+                pool[idx].gameObject.SetActive(false);
+                inUse[idx] = false;
+                activeIndices.RemoveAt(i);
                 dropTimers.RemoveAt(i);
                 continue;
             }
 
-            var pos = drops[i].anchoredPosition;
+            var pos = pool[idx].anchoredPosition;
             pos.y -= dropSpeed * Time.deltaTime;
-            drops[i].anchoredPosition = pos;
+            pool[idx].anchoredPosition = pos;
 
-            var img = drops[i].GetComponent<Image>();
-            if (img != null)
-            {
-                var c = img.color;
-                c.a = 1f - t;
-                img.color = c;
-            }
+            var c = poolImgs[idx].color;
+            c.a = 1f - t;
+            poolImgs[idx].color = c;
         }
     }
 
     void SpawnDrop()
     {
-        var go = new GameObject("Drop");
-        var rt = go.AddComponent<RectTransform>();
-        rt.SetParent(transform, false);
-        rt.sizeDelta = new Vector2(12, 16);
-        rt.anchoredPosition = new Vector2(
+        int freeIdx = -1;
+        for (int i = 0; i < pool.Count; i++)
+        {
+            if (!inUse[i]) { freeIdx = i; break; }
+        }
+        if (freeIdx < 0) return;
+
+        pool[freeIdx].anchoredPosition = new Vector2(
             Random.Range(-spreadX / 2f, spreadX / 2f),
             Random.Range(15f, 50f)
         );
 
-        var img = go.AddComponent<Image>();
-        img.sprite = dropSprite;
-        img.color = new Color(0.4f, 0.7f, 1f, 0.9f);
-        img.raycastTarget = false;
+        var c = poolImgs[freeIdx].color;
+        c.a = 0.9f;
+        poolImgs[freeIdx].color = c;
 
-        drops.Add(rt);
+        pool[freeIdx].gameObject.SetActive(true);
+        inUse[freeIdx] = true;
+        activeIndices.Add(freeIdx);
         dropTimers.Add(0f);
     }
 

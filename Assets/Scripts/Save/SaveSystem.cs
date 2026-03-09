@@ -83,6 +83,9 @@ public class SaveSystem : MonoBehaviour
                     growthProgress = plot.GrowthProgress
                 });
             }
+
+            data.unlockedPlotIndices = garden.GetUnlockedPlotIndices();
+            data.unlockedFlowerNames = garden.GetUnlockedFlowerNamesList();
         }
 
         // Inventory
@@ -94,6 +97,20 @@ public class SaveSystem : MonoBehaviour
         var market = Services.Get<MarketManager>();
         if (market != null)
             data.marketDemand = market.GetSaveData();
+
+        // Boost
+        var boost = Services.Get<BoostManager>();
+        if (boost != null)
+            data.boostTimeRemaining = boost.BoostTimeRemaining;
+
+        // Achievements
+        if (Services.TryGet<AchievementManager>(out var achievements))
+        {
+            data.completedAchievements  = achievements.GetSaveData();
+            data.totalHarvests          = achievements.TotalHarvests;
+            data.totalOrdersFilled      = achievements.TotalOrdersFilled;
+            data.totalPetalsEarned      = achievements.TotalPetalsEarned;
+        }
 
         data.lastSaveTime = DateTime.UtcNow.ToBinary();
 
@@ -148,8 +165,29 @@ public class SaveSystem : MonoBehaviour
 
         // Plots
         var garden = Services.Get<GardenManager>();
-        if (garden != null && data.plots != null)
-            garden.LoadPlotData(data.plots);
+        if (garden != null)
+        {
+            // Migrate legacy PlayerPrefs unlock key → JSON on first load
+            if (data.unlockedPlotIndices == null || data.unlockedPlotIndices.Count == 0)
+            {
+                if (PlayerPrefs.HasKey(GardenManager.UNLOCK_SAVE_KEY_LEGACY))
+                {
+                    var migrated = new List<int>();
+                    string raw = PlayerPrefs.GetString(GardenManager.UNLOCK_SAVE_KEY_LEGACY);
+                    foreach (string idx in raw.Split(','))
+                        if (int.TryParse(idx, out int i)) migrated.Add(i);
+                    data.unlockedPlotIndices = migrated;
+                    PlayerPrefs.DeleteKey(GardenManager.UNLOCK_SAVE_KEY_LEGACY);
+                    Debug.Log("[SaveSystem] Migrated plot unlocks from PlayerPrefs to JSON.");
+                }
+            }
+
+            garden.ApplyUnlockedPlotIndices(data.unlockedPlotIndices);
+            garden.LoadUnlockedFlowers(data.unlockedFlowerNames);
+
+            if (data.plots != null)
+                garden.LoadPlotData(data.plots);
+        }
 
         // Inventory
         var inventory = Services.Get<InventoryManager>();
@@ -161,6 +199,16 @@ public class SaveSystem : MonoBehaviour
         if (market != null)
             market.LoadSaveData(data.marketDemand);
 
+        // Boost
+        var boost = Services.Get<BoostManager>();
+        if (boost != null && data.boostTimeRemaining > 0)
+            boost.LoadSaveData(data.boostTimeRemaining);
+
+        // Achievements
+        if (Services.TryGet<AchievementManager>(out var achievements))
+            achievements.LoadSaveData(data.completedAchievements,
+                data.totalHarvests, data.totalOrdersFilled, data.totalPetalsEarned);
+
         // Offline progress
         if (data.lastSaveTime != 0)
         {
@@ -170,24 +218,16 @@ public class SaveSystem : MonoBehaviour
             if (elapsed > 0 && garden != null)
             {
                 double petalsBefore = currency != null ? currency.GetBalance(CurrencyType.Petals) : 0;
-                int bloomedBefore = 0;
-                foreach (var plot in garden.Plots)
-                    if (plot.State == PlotState.Bloomed) bloomedBefore++;
 
-                garden.ApplyOfflineTime(elapsed);
+                int offlineHarvests = garden.ApplyOfflineTime(elapsed);
 
-                double petalsAfter  = currency != null ? currency.GetBalance(CurrencyType.Petals) : 0;
-                int bloomedAfter = 0;
-                foreach (var plot in garden.Plots)
-                    if (plot.State == PlotState.Bloomed) bloomedAfter++;
-
-                double petalsEarned  = petalsAfter - petalsBefore;
-                int flowersBloomed = bloomedAfter - bloomedBefore;
+                double petalsAfter = currency != null ? currency.GetBalance(CurrencyType.Petals) : 0;
+                double petalsEarned = petalsAfter - petalsBefore;
 
                 if (Services.TryGet<AwayPopup>(out var popup))
-                    popup.Show(elapsed, petalsEarned, flowersBloomed);
+                    popup.Show(elapsed, petalsEarned, offlineHarvests);
 
-                Debug.Log($"[SaveSystem] Applied {elapsed:F0}s offline progress. +{petalsEarned:F0} petals, {flowersBloomed} bloomed.");
+                Debug.Log($"[SaveSystem] Applied {elapsed:F0}s offline progress. +{petalsEarned:F0} petals, {offlineHarvests} harvests.");
             }
         }
 
@@ -214,9 +254,16 @@ public class SaveData
     public int phase;
     public long lastSaveTime;
     public List<PlotSaveData> plots;
+    public List<int> unlockedPlotIndices;
+    public List<string> unlockedFlowerNames;
+    public List<int> completedAchievements;
+    public int totalHarvests;
+    public int totalOrdersFilled;
+    public double totalPetalsEarned;
     public List<UpgradeSaveEntry> upgrades;
     public List<InventorySaveEntry> inventory;
     public List<DemandSaveEntry> marketDemand;
+    public float boostTimeRemaining;
 }
 
 [Serializable]

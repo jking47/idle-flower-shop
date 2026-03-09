@@ -32,6 +32,7 @@ public class MarketManager : MonoBehaviour
 
     float shiftTimer;
     System.Random rng;
+    bool _loaded;
 
     public event Action OnMarketUpdated;
 
@@ -58,6 +59,9 @@ public class MarketManager : MonoBehaviour
 
     void InitializeDemand()
     {
+        // If save data has already been applied, skip random init — load always wins
+        if (_loaded) return;
+
         var garden = Services.Get<GardenManager>();
         if (garden == null) return;
 
@@ -213,9 +217,8 @@ public class MarketManager : MonoBehaviour
     {
         if (data == null) return;
         foreach (var entry in data)
-        {
             demandScores[entry.flowerName] = entry.score;
-        }
+        _loaded = true;
         OnMarketUpdated?.Invoke();
         EventBus.Publish(new MarketUpdatedEvent());
     }

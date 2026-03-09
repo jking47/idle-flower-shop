@@ -5,6 +5,10 @@ using UnityEngine.UI;
 /// Shop UI panel. Implements IPanel for PanelManager (one panel open at a time).
 /// Only shows slots up to ShopManager.MaxActiveOrders. Hidden slots become visible
 /// when the Order Slots upgrade is purchased.
+///
+/// Grid layout is configured at runtime from orderSlots[0].transform.parent — no
+/// inspector assignment needed for the container. Cell size and column count are
+/// tunable here without touching the scene or prefab.
 /// </summary>
 public class ShopPanel : MonoBehaviour, IPanel
 {
@@ -19,6 +23,13 @@ public class ShopPanel : MonoBehaviour, IPanel
     [Header("Phase Gate")]
     [SerializeField] GameObject lockedOverlay;
 
+    [Header("Grid Layout")]
+    [Tooltip("Width and height of each order card in the grid. Adjust for your screen size.")]
+    [SerializeField] Vector2 gridCellSize = new Vector2(400f, 340f);
+
+    [Tooltip("Number of order card columns in the grid.")]
+    [SerializeField] int gridColumns = 2;
+
     ShopManager shop;
 
     void Awake()
@@ -28,6 +39,7 @@ public class ShopPanel : MonoBehaviour, IPanel
         if (openButton != null) openButton.onClick.AddListener(Open);
         if (closeButton != null) closeButton.onClick.AddListener(Close);
 
+        gameObject.AddComponent<PanelTransition>();
         gameObject.SetActive(false);
     }
 
@@ -41,6 +53,7 @@ public class ShopPanel : MonoBehaviour, IPanel
         bool unlocked = GameManager.Instance != null &&
                         GameManager.Instance.CurrentPhase >= GamePhase.Shop;
         lockedOverlay?.SetActive(!unlocked);
+        ConfigureOrdersGrid();
         RefreshAllSlots();
     }
 
@@ -72,6 +85,12 @@ public class ShopPanel : MonoBehaviour, IPanel
             pm.Open(this);
 
         gameObject.SetActive(true);
+
+        // Re-check on every open in case phase advanced while panel was closed
+        bool unlocked = GameManager.Instance != null &&
+                        GameManager.Instance.CurrentPhase >= GamePhase.Shop;
+        lockedOverlay?.SetActive(!unlocked);
+
         RefreshAllSlots();
     }
 
@@ -103,6 +122,36 @@ public class ShopPanel : MonoBehaviour, IPanel
     {
         // Slot count may have changed — refresh visibility
         RefreshAllSlots();
+    }
+
+    // --- Grid setup ---
+
+    /// <summary>
+    /// Replaces the scene's VerticalLayoutGroup on the order container with a
+    /// GridLayoutGroup. Called once in Start — container is inferred from the
+    /// first slot's parent so no extra inspector assignment is needed.
+    /// </summary>
+    void ConfigureOrdersGrid()
+    {
+        if (orderSlots == null || orderSlots.Length == 0 || orderSlots[0] == null) return;
+
+        var container = orderSlots[0].transform.parent;
+        if (container == null) return;
+
+        // Disable the existing VLG so it doesn't fight the GLG
+        var vlg = container.GetComponent<VerticalLayoutGroup>();
+        if (vlg != null) vlg.enabled = false;
+
+        // Add (or reuse) a GridLayoutGroup
+        var glg = container.GetComponent<GridLayoutGroup>();
+        if (glg == null) glg = container.gameObject.AddComponent<GridLayoutGroup>();
+
+        glg.cellSize        = gridCellSize;
+        glg.spacing         = new Vector2(8f, 8f);
+        glg.padding         = new RectOffset(8, 8, 8, 8);
+        glg.constraint      = GridLayoutGroup.Constraint.FixedColumnCount;
+        glg.constraintCount = gridColumns;
+        glg.childAlignment  = TextAnchor.UpperLeft;
     }
 
     // --- Helpers ---

@@ -13,13 +13,13 @@ MonoBehaviour:
   m_Name: Flower_4_Sunflower
   m_EditorClassIdentifier: Assembly-CSharp::FlowerData
   displayName: Sunflower
-  description: This flower reminds you of a warm summer day
+  description: Big harvests — best total petals per growth cycle
   rarity: 3
   icon: {fileID: 0}
   growTime: 60
-  baseYield: 30
+  baseYield: 55
   plantCost: 15
-  baseSellValue: 20
+  baseSellValue: 8
   requiredPhase: 0
-  unlockCost: -1
+  unlockCost: 250
   socialExclusive: 0

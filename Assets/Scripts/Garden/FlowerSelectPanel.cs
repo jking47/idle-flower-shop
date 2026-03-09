@@ -77,9 +77,11 @@ public class FlowerSelectPanel : MonoBehaviour, IPanel
             Destroy(btn);
         spawnedButtons.Clear();
 
+        Services.TryGet<GameManager>(out var gm);
+
         foreach (var flower in garden.AvailableFlowers)
         {
-            if (Services.TryGet<GameManager>(out var gm) && flower.requiredPhase > gm.CurrentPhase)
+            if (gm != null && flower.requiredPhase > gm.CurrentPhase)
                 continue;
 
             var obj = Instantiate(flowerButtonPrefab, buttonContainer);
@@ -90,29 +92,52 @@ public class FlowerSelectPanel : MonoBehaviour, IPanel
             var costText = obj.transform.Find("CostText")?.GetComponent<TMP_Text>();
             var button = obj.GetComponent<Button>();
 
+            bool isUnlocked = garden.IsFlowerUnlocked(flower);
+
             if (icon != null && flower.icon != null)
                 icon.sprite = flower.icon;
 
             if (nameText != null)
                 nameText.text = flower.displayName;
 
-            if (costText != null)
+            if (isUnlocked)
             {
-                string cost = flower.plantCost > 0 ? $"Cost: {flower.plantCost:F0} petals" : "Free";
-                costText.text = $"{cost}\n<size=22><color=#8899AA>Yield: +{flower.baseYield:F0} | Grow: {flower.growTime:F0}s</color></size>";
+                if (costText != null)
+                {
+                    string plantCostStr = flower.plantCost > 0
+                        ? $"Cost: {flower.plantCost:F0} petals"
+                        : "Free";
+                    costText.text = $"{plantCostStr}\n<size=22><color=#8899AA>Yield: +{flower.baseYield:F0} | Grow: {flower.growTime:F0}s</color></size>";
+                }
+
+                bool canAfford = currency.CanAfford(CurrencyType.Petals, flower.plantCost) || flower.plantCost <= 0;
+                if (!canAfford)
+                {
+                    var colors = button.colors;
+                    colors.normalColor = new Color(0.5f, 0.5f, 0.5f, 0.7f);
+                    button.colors = colors;
+                }
+
+                var selectedFlower = flower;
+                button.onClick.AddListener(() => OnFlowerChosen(selectedFlower));
             }
-
-            bool canAfford = currency.CanAfford(CurrencyType.Petals, flower.plantCost) || flower.plantCost <= 0;
-
-            if (!canAfford)
+            else
             {
-                var colors = button.colors;
-                colors.normalColor = new Color(0.5f, 0.5f, 0.5f, 0.7f);
-                button.colors = colors;
-            }
+                // Locked — show unlock cost and handle unlock tap
+                if (costText != null)
+                {
+                    bool canAffordUnlock = currency.CanAfford(CurrencyType.Petals, flower.unlockCost);
+                    string affordColor = canAffordUnlock ? "#FFDD88" : "#FF6666";
+                    costText.text = $"<color=#AABBCC>LOCKED</color>\n<size=22><color={affordColor}>Unlock: {flower.unlockCost:F0} petals</color></size>";
+                }
 
-            var selectedFlower = flower;
-            button.onClick.AddListener(() => OnFlowerChosen(selectedFlower));
+                // Grey tint for locked state
+                if (icon != null)
+                    icon.color = new Color(0.5f, 0.5f, 0.5f, 0.6f);
+
+                var unlockFlower = flower;
+                button.onClick.AddListener(() => OnUnlockChosen(unlockFlower));
+            }
         }
     }
 
@@ -123,6 +148,21 @@ public class FlowerSelectPanel : MonoBehaviour, IPanel
         if (garden.PlantFlower(targetPlotIndex, flower))
         {
             Close();
+        }
+    }
+
+    void OnUnlockChosen(FlowerData flower)
+    {
+        if (garden.TryUnlockFlower(flower))
+        {
+            if (Services.TryGet<GameJuice>(out var juice))
+                juice.PlayUnlock();
+            BuildButtons(); // refresh to show unlocked state
+        }
+        else
+        {
+            if (Services.TryGet<GameJuice>(out var juice))
+                juice.PlayError();
         }
     }
 }

@@ -36,14 +36,14 @@ public class AdSimulator : MonoBehaviour
         "TAP TO GROW TODAY!!!"
     };
 
-    public static void Show(MonoBehaviour host, float duration, Action onComplete)
+    public static void Show(float duration, Action onComplete)
     {
         var go = new GameObject("FakeAdOverlay");
         var sim = go.AddComponent<AdSimulator>();
-        sim.StartCoroutine(sim.RunAd(host, duration, onComplete));
+        sim.StartCoroutine(sim.RunAd(duration, onComplete));
     }
 
-    IEnumerator RunAd(MonoBehaviour host, float duration, Action onComplete)
+    IEnumerator RunAd(float duration, Action onComplete)
     {
         // Find canvas
         var canvas = FindFirstObjectByType<Canvas>();

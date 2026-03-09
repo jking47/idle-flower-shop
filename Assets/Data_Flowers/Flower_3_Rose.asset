@@ -13,13 +13,13 @@ MonoBehaviour:
   m_Name: Flower_3_Rose
   m_EditorClassIdentifier: Assembly-CSharp::FlowerData
   displayName: Rose
-  description: The flower of romance
+  description: Worth more in the shop than in the garden — trade petals for coins
   rarity: 2
   icon: {fileID: 0}
   growTime: 30
-  baseYield: 15
+  baseYield: 12
   plantCost: 10
-  baseSellValue: 10
+  baseSellValue: 20
   requiredPhase: 0
-  unlockCost: -1
+  unlockCost: 75
   socialExclusive: 0

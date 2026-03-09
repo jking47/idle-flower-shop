@@ -36,6 +36,6 @@ public class OrderData : ScriptableObject
     public float timeLimit = 90f;
 
     [Header("Availability")]
-    [Tooltip("Minimum shop upgrade level before this order can appear. 0 = always available.")]
+    [Tooltip("Minimum GamePhase before this order can appear. 0=Patch, 1=Garden, 2=Shop, 3=Business. Orders only spawn once the shop is open (phase 2+), so 0–2 all unlock at shop opening.")]
     public int minShopLevel = 0;
 }

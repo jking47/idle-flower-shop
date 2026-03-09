@@ -34,15 +34,16 @@ public class PhaseHUDLabel : MonoBehaviour
 
     private void Refresh()
     {
-        var phase = GameManager.Instance.CurrentPhase;
+        if (!Services.TryGet<GameManager>(out var gm)) return;
+        var phase = gm.CurrentPhase;
         string current = $"Phase: {PhaseName(phase)}";
 
         string next = phase switch
         {
-            GamePhase.Patch => $"Next: The Garden ({(int)currency.GetBalance(CurrencyType.Petals)}/50 petals)",
-            GamePhase.Garden => $"Next: The Shop ({(int)currency.GetBalance(CurrencyType.Petals)}/500 petals)",
-            GamePhase.Shop => $"Next: The Business ({(int)currency.GetBalance(CurrencyType.Coins)}/1000 coins)",
-            _ => "All phases unlocked!"
+            GamePhase.Patch   => $"Next: The Garden ({(int)currency.GetBalance(CurrencyType.Petals)}/{(int)gm.GardenUnlockPetals} petals)",
+            GamePhase.Garden  => $"Next: The Shop ({(int)currency.GetBalance(CurrencyType.Petals)}/{(int)gm.ShopUnlockPetals} petals)",
+            GamePhase.Shop    => $"Next: The Business ({(int)currency.GetBalance(CurrencyType.Coins)}/{(int)gm.BusinessUnlockCoins} coins)",
+            _                 => "All phases unlocked!"
         };
 
         label.text = $"{current}\n{next}";

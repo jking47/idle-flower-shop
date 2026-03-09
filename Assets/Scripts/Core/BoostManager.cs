@@ -57,6 +57,14 @@ public class BoostManager : MonoBehaviour
     }
 
     /// <summary>
+    /// Restore boost timer from save data.
+    /// </summary>
+    public void LoadSaveData(float remainingSeconds)
+    {
+        boostTimeRemaining = Mathf.Max(0f, remainingSeconds);
+    }
+
+    /// <summary>
     /// Instantly bloom a growing flower. Returns true if purchased successfully.
     /// </summary>
     public bool InstantBloom(FlowerBed plot)

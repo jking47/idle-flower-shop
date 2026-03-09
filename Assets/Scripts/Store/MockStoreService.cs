@@ -67,7 +67,7 @@ public class MockStoreService : MonoBehaviour, IStoreService
     public void WatchAd(string placement, Action<bool> callback)
     {
         // Show the fake ad overlay instead of a silent wait
-        AdSimulator.Show(this, adDuration, () =>
+        AdSimulator.Show(adDuration, () =>
         {
             Debug.Log($"[Store] Ad complete for: {placement}");
             callback?.Invoke(true);

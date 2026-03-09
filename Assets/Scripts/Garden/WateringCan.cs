@@ -49,6 +49,11 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
     // Track which plots are being watered this frame
     readonly HashSet<FlowerBed> wateredPlots = new();
 
+    // Cached raycast collections — reused every drag frame to avoid GC allocs
+    readonly List<RaycastResult> _raycastResults = new();
+    readonly HashSet<FlowerBed>  _currentlyOver  = new();
+    readonly List<FlowerBed>     _toRemove       = new();
+
     public bool IsUnlocked => isUnlocked;
     public bool IsDragging => isDragging;
     public float WaterPercent => maxWater > 0 ? currentWater / maxWater : 0f;
@@ -217,17 +222,17 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
 
     void CheckPlotsUnderPointer(PointerEventData eventData)
     {
-        var results = new List<RaycastResult>();
-        EventSystem.current.RaycastAll(eventData, results);
+        _raycastResults.Clear();
+        EventSystem.current.RaycastAll(eventData, _raycastResults);
 
-        var currentlyOver = new HashSet<FlowerBed>();
+        _currentlyOver.Clear();
 
-        foreach (var result in results)
+        foreach (var result in _raycastResults)
         {
             var plot = result.gameObject.GetComponent<FlowerBed>();
             if (plot != null && plot.State == PlotState.Growing && currentWater > 0)
             {
-                currentlyOver.Add(plot);
+                _currentlyOver.Add(plot);
 
                 if (!wateredPlots.Contains(plot))
                 {
@@ -236,21 +241,21 @@ public class WateringCan : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
             }
         }
 
-        var toRemove = new List<FlowerBed>();
+        _toRemove.Clear();
         foreach (var plot in wateredPlots)
         {
-            if (!currentlyOver.Contains(plot))
+            if (!_currentlyOver.Contains(plot))
             {
                 plot.SetWateringVisual(false);
-                toRemove.Add(plot);
+                _toRemove.Add(plot);
             }
         }
-        foreach (var plot in toRemove)
+        foreach (var plot in _toRemove)
         {
             wateredPlots.Remove(plot);
         }
 
-        foreach (var plot in currentlyOver)
+        foreach (var plot in _currentlyOver)
         {
             wateredPlots.Add(plot);
         }

@@ -15,7 +15,7 @@ public class FlowerSpriteInitializer : MonoBehaviour
     [SerializeField] Color waterBgColor = new Color(0.15f, 0.15f, 0.25f, 0.8f);
 
     // flowerName → stage → sprite
-    static readonly Dictionary<string, Dictionary<FlowerSpriteGenerator.GrowthStage, Sprite>> sprites = new();
+    static Dictionary<string, Dictionary<FlowerSpriteGenerator.GrowthStage, Sprite>> sprites = new();
 
     // Cached fill bar sprites (still generated for anything that references them)
     static Sprite growthFill, growthBg, waterFill, waterBg;
@@ -31,11 +31,22 @@ public class FlowerSpriteInitializer : MonoBehaviour
         GenerateWateringCanSprite();
         GenerateFillBarSprites();
         ApplyFillBarColors();
+        EventBus.Publish(new SpritesInitializedEvent());
     }
 
     void GenerateFlowerSprites()
     {
         if (!Services.TryGet<GardenManager>(out var garden)) return;
+
+        // Destroy old GPU-backed sprites before regenerating to prevent texture leaks on reload
+        foreach (var stageDict in sprites.Values)
+            foreach (var sprite in stageDict.Values)
+                if (sprite != null) Destroy(sprite);
+        sprites.Clear();
+
+        foreach (var s in new[] { growthFill, growthBg, waterFill, waterBg })
+            if (s != null) Destroy(s);
+        growthFill = growthBg = waterFill = waterBg = null;
 
         FlowerSpriteGenerator.SpriteSize = 128;
         FlowerSpriteGenerator.PetalCount = 5;

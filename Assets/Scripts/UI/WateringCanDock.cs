@@ -20,16 +20,11 @@ public class WateringCanDock : MonoBehaviour
     [SerializeField] Color hintColor = new Color(0.55f, 0.6f, 0.7f);
 
     GameObject hintObject;
-    bool hintShown;
-
-    const string HINT_KEY = "WaterDockHintShown";
 
     void Awake()
     {
         BuildLabel();
         BuildDragHint();
-
-        hintShown = PlayerPrefs.GetInt(HINT_KEY, 0) == 1;
     }
 
     void OnEnable()

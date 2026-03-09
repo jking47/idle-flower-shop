@@ -5,8 +5,13 @@ using UnityEngine.UI;
 
 /// <summary>
 /// UI card for one active order slot.
-/// Shows order details when active, "Awaiting customer..." when empty.
-/// Flower icons preserve aspect ratio.
+/// Shows order details when active, next-spawn countdown when empty.
+///
+/// CompactCardLayout() runs in Awake to override the prefab's large font sizes and
+/// spacings so the card fits a grid cell. It also enables childControlHeight on
+/// ActiveState's VerticalLayoutGroup and sets explicit LayoutElement preferred
+/// heights — without this, the VLG ignores font size and uses the prefab sizeDelta
+/// values (~96px per section) which overflow any compact cell.
 /// </summary>
 public class ShopOrderUI : MonoBehaviour
 {
@@ -37,6 +42,11 @@ public class ShopOrderUI : MonoBehaviour
     ActiveOrder trackedOrder;
     readonly List<ShopRequirementRow> rows = new();
 
+    void Awake()
+    {
+        CompactCardLayout();
+    }
+
     void OnEnable() => EventBus.Subscribe<MarketUpdatedEvent>(OnMarketUpdated);
     void OnDisable() => EventBus.Unsubscribe<MarketUpdatedEvent>(OnMarketUpdated);
 
@@ -53,7 +63,13 @@ public class ShopOrderUI : MonoBehaviour
 
     void Update()
     {
-        if (trackedOrder == null || trackedOrder.IsExpired) return;
+        if (trackedOrder == null)
+        {
+            UpdateEmptyText();
+            return;
+        }
+
+        if (trackedOrder.IsExpired) return;
 
         float t = trackedOrder.timeRemaining;
         if (timerText)
@@ -86,9 +102,6 @@ public class ShopOrderUI : MonoBehaviour
         RefreshFillButton();
     }
 
-    /// <summary>
-    /// Refresh button state and requirement counts. Called on inventory change.
-    /// </summary>
     public void RefreshFillButton()
     {
         if (fillButton == null || trackedOrder == null) return;
@@ -99,7 +112,122 @@ public class ShopOrderUI : MonoBehaviour
         fillButton.interactable = canFill;
 
         if (fillButtonText)
-            fillButtonText.text = canFill ? "Fill Order" : "Grow More Flowers";
+            fillButtonText.text = canFill ? "Fill Order" : "Need More Flowers";
+    }
+
+    // --- Layout compaction ---
+
+    void CompactCardLayout()
+    {
+        // Root VLG — stretch children to fill card width
+        var rootVlg = GetComponent<VerticalLayoutGroup>();
+        if (rootVlg != null)
+        {
+            rootVlg.padding               = new RectOffset(8, 8, 8, 8);
+            rootVlg.childControlWidth     = true;
+            rootVlg.childForceExpandWidth = true;
+        }
+
+        // ActiveState VLG — use preferred heights, stretch all children to full width
+        if (activeState != null)
+        {
+            var vlg = activeState.GetComponent<VerticalLayoutGroup>();
+            if (vlg != null)
+            {
+                vlg.childControlHeight     = true;
+                vlg.childForceExpandHeight = false;
+                vlg.childControlWidth      = true;
+                vlg.childForceExpandWidth  = true;
+                vlg.spacing                = 5f;
+            }
+
+            // Any HLG rows inside ActiveState (e.g. reward row, timer row) also need
+            // childControlWidth so they respect the width set by the parent VLG and
+            // don't revert to their prefab sizeDelta, which causes text to clip left.
+            foreach (var hlg in activeState.GetComponentsInChildren<HorizontalLayoutGroup>(true))
+            {
+                hlg.childControlWidth      = true;
+                hlg.childForceExpandWidth  = false;
+                hlg.childControlHeight     = true;
+                hlg.childForceExpandHeight = false;
+            }
+        }
+
+        // Order name
+        if (orderNameText)
+        {
+            orderNameText.fontSize           = 24f;
+            orderNameText.enableWordWrapping = false;
+            orderNameText.overflowMode       = TextOverflowModes.Ellipsis;
+            SetPreferredHeight(orderNameText.transform, 30f);
+        }
+
+        // Reward text — target its container row if it has one
+        if (rewardText)
+        {
+            rewardText.fontSize           = 20f;
+            rewardText.enableWordWrapping = false;
+            var rewardTarget = GetLayoutTarget(rewardText.transform);
+            SetPreferredHeight(rewardTarget, 26f);
+        }
+
+        // Requirements container — cap height, ensure rows fill width
+        if (requirementsContainer)
+        {
+            SetPreferredHeight(requirementsContainer, 140f);
+            var reqVlg = requirementsContainer.GetComponent<VerticalLayoutGroup>();
+            if (reqVlg != null)
+            {
+                reqVlg.childControlWidth     = true;
+                reqVlg.childForceExpandWidth = true;
+            }
+        }
+
+        // Timer row
+        if (timerText != null)
+        {
+            var timerRow = timerText.transform.parent;
+            if (timerRow != null)
+            {
+                foreach (var t in timerRow.GetComponentsInChildren<TMP_Text>())
+                {
+                    t.fontSize           = 20f;
+                    t.enableWordWrapping = false;
+                }
+                SetPreferredHeight(timerRow, 26f);
+            }
+        }
+
+        if (fillButton)     SetPreferredHeight(fillButton.transform, 44f);
+        if (fillButtonText) fillButtonText.fontSize = 20f;
+
+        if (emptyText)
+        {
+            emptyText.fontSize           = 22f;
+            emptyText.enableWordWrapping = false;
+            emptyText.overflowMode       = TextOverflowModes.Ellipsis;
+        }
+    }
+
+    /// <summary>
+    /// Returns the appropriate layout target for a TMP_Text: if the TMP is a child
+    /// of a non-ActiveState container, return that container (the real layout element);
+    /// otherwise return the TMP's own transform.
+    /// </summary>
+    Transform GetLayoutTarget(Transform tmp)
+    {
+        var parent = tmp.parent;
+        if (parent != null && parent != activeState?.transform)
+            return parent;
+        return tmp;
+    }
+
+    /// <summary>Gets or adds a LayoutElement and sets its preferred height.</summary>
+    void SetPreferredHeight(Transform t, float height)
+    {
+        var le = t.GetComponent<LayoutElement>();
+        if (le == null) le = t.gameObject.AddComponent<LayoutElement>();
+        le.preferredHeight = height;
     }
 
     // --- Internal ---
@@ -124,10 +252,37 @@ public class ShopOrderUI : MonoBehaviour
             var row = Instantiate(requirementRowPrefab, requirementsContainer);
             row.Set(req.flower, req.count);
 
-            // Fix squished flower icons — find the icon Image and preserve aspect
-            var icon = row.transform.Find("Icon")?.GetComponent<Image>();
-            if (icon != null)
-                icon.preserveAspect = true;
+            // Row HLG: distribute width properly, don't force-expand any single element
+            var hlg = row.GetComponent<HorizontalLayoutGroup>();
+            if (hlg != null)
+            {
+                hlg.childControlWidth      = true;
+                hlg.childForceExpandWidth  = false;
+                hlg.childControlHeight     = true;
+                hlg.childForceExpandHeight = false;
+            }
+
+            // Flower icon — fixed square, larger for readability
+            foreach (var img in row.GetComponentsInChildren<Image>())
+            {
+                img.preserveAspect = true;
+                var le = img.GetComponent<LayoutElement>() ?? img.gameObject.AddComponent<LayoutElement>();
+                le.minWidth        = 28f;
+                le.minHeight       = 28f;
+                le.preferredWidth  = 28f;
+                le.preferredHeight = 28f;
+            }
+
+            // Text labels — readable size, no mid-word wrapping
+            foreach (var txt in row.GetComponentsInChildren<TMP_Text>())
+            {
+                txt.fontSize           = 18f;
+                txt.enableWordWrapping = false;
+                txt.overflowMode       = TextOverflowModes.Ellipsis;
+            }
+
+            // Cap row height so 4 requirements fit the 140px container budget
+            SetPreferredHeight(row.transform, 32f);
 
             rows.Add(row);
         }
@@ -140,10 +295,19 @@ public class ShopOrderUI : MonoBehaviour
         trackedOrder = null;
         emptyState?.SetActive(true);
         activeState?.SetActive(false);
+        UpdateEmptyText();
+    }
 
-        // Update empty state text if we have a reference
-        if (emptyText != null)
-            emptyText.text = "Awaiting customer...";
+    void UpdateEmptyText()
+    {
+        if (emptyText == null) return;
+
+        Services.TryGet<ShopManager>(out var shop);
+        float timeLeft = shop?.TimeUntilNextSpawn ?? -1f;
+
+        emptyText.text = timeLeft >= 0f
+            ? $"Next customer in {FormatTime(timeLeft)}"
+            : "Awaiting customer...";
     }
 
     string FormatTime(float seconds)

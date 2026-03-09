@@ -32,6 +32,9 @@ public class FlowerBed : MonoBehaviour
 
     CurrencyManager currency;
 
+    // Pest damage — multiplier applied to yield at harvest (1.0 = no damage)
+    float pestDamageMultiplier = 1f;
+
     // Lock state
     bool isLocked;
     double unlockCost;
@@ -47,6 +50,7 @@ public class FlowerBed : MonoBehaviour
     public FlowerData CurrentFlower => currentFlower;
     public FlowerData PreferredFlower => preferredFlower;
     public float GrowthProgress => growthDuration > 0 ? growthTimer / growthDuration : 0f;
+    public float GrowthDuration => growthDuration;
     public bool IsLocked => isLocked;
     public int PlotIndex => plotIndex;
 
@@ -106,9 +110,6 @@ public class FlowerBed : MonoBehaviour
 
         if (Services.TryGet<GameJuice>(out var j))
             j.PlayUnlock();
-
-        if (Services.TryGet<GardenManager>(out var garden))
-            garden.SaveUnlockState();
 
         return true;
     }
@@ -372,7 +373,12 @@ public class FlowerBed : MonoBehaviour
         if (Services.TryGet<BoostManager>(out var boost))
             yield *= boost.BoostMultiplier;
 
-        currency.Add(CurrencyType.Petals, yield);
+        yield *= pestDamageMultiplier;
+        pestDamageMultiplier = 1f;
+        if (flowerImage != null) flowerImage.color = Color.white; // clear damage tint
+
+        if (!Services.TryGet<CurrencyManager>(out var currencyManager)) return;
+        currencyManager.Add(CurrencyType.Petals, yield);
 
         EventBus.Publish(new FlowerHarvestedEvent
         {
@@ -462,6 +468,19 @@ public class FlowerBed : MonoBehaviour
             wateringEffect.SetActive(watering);
     }
 
+    /// <summary>
+    /// Called by a pest that reached this plot. Reduces yield at next harvest
+    /// and applies a red tint to signal the damage.
+    /// </summary>
+    public void ApplyPestDamage(float penaltyPercent)
+    {
+        pestDamageMultiplier = Mathf.Clamp01(1f - penaltyPercent);
+
+        // Red tint on the flower image to signal damage
+        if (flowerImage != null)
+            flowerImage.color = Color.Lerp(Color.white, new Color(1f, 0.35f, 0.35f), penaltyPercent);
+    }
+
     void UpdateVisuals()
     {
         UpdateLockVisuals();
@@ -510,7 +529,3 @@ public class FlowerBed : MonoBehaviour
     }
 }
 
-public struct PlotSelectedEvent
-{
-    public int plotIndex;
-}

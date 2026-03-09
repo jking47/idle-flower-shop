@@ -19,6 +19,10 @@ public class GameManager : MonoBehaviour
 
     public GamePhase CurrentPhase => currentPhase;
 
+    public double GardenUnlockPetals  => gardenUnlockPetals;
+    public double ShopUnlockPetals    => shopUnlockPetals;
+    public double BusinessUnlockCoins => businessUnlockCoins;
+
     bool suppressPhaseEvents;
 
     /// <summary>
@@ -114,6 +118,17 @@ public class GameManager : MonoBehaviour
                 advanced = true;
                 Debug.Log($"[GameManager] Phase unlocked: {currentPhase}");
                 EventBus.Publish(new PhaseUnlockedEvent { phase = currentPhase });
+
+                // Award renown for reaching each new phase
+                double renownReward = newPhase switch
+                {
+                    GamePhase.Garden   => 10,
+                    GamePhase.Shop     => 50,
+                    GamePhase.Business => 100,
+                    _                  => 0
+                };
+                if (renownReward > 0)
+                    Services.Get<CurrencyManager>()?.Add(CurrencyType.Renown, renownReward);
             }
         }
     }

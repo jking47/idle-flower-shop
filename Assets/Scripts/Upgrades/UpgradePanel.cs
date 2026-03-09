@@ -37,6 +37,7 @@ public class UpgradePanel : MonoBehaviour, IPanel
 
         EventBus.Subscribe<UpgradePurchasedEvent>(OnUpgradePurchased);
 
+        gameObject.AddComponent<PanelTransition>();
         gameObject.SetActive(false);
     }
 

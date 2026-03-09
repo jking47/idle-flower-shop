@@ -13,13 +13,13 @@ MonoBehaviour:
   m_Name: OrderSlots
   m_EditorClassIdentifier: Assembly-CSharp::UpgradeData
   displayName: Extra Order Slots
-  description: Increases the amount of available Orders in the Garden Shop.
+  description: Add another customer slot to the shop. Costs coins — a real business investment.
   icon: {fileID: 0}
   upgradeType: 8
-  costCurrency: 0
+  costCurrency: 1
   effectPerLevel: 1
   maxLevel: 2
-  baseCost: 10
-  costScaling: 2
+  baseCost: 150
+  costScaling: 2.5
   requiredPhase: 2
   prerequisites: []

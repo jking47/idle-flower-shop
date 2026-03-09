@@ -31,22 +31,23 @@ public class AwayPopup : MonoBehaviour
 
     /// <summary>
     /// Called by SaveSystem after offline progress is calculated.
+    /// offlineHarvests is total auto-harvest cycles that ran while away.
     /// </summary>
-    public void Show(float secondsAway, double petalsEarned, int flowersBloomed)
+    public void Show(float secondsAway, double petalsEarned, int offlineHarvests)
     {
         if (secondsAway < minimumAwayTime) return;
 
         if (titleText != null)
-            titleText.text = "While you were away...";
+            titleText.text = PickTitle(secondsAway, petalsEarned);
 
         if (timeAwayText != null)
-            timeAwayText.text = FormatDuration(secondsAway);
+            timeAwayText.text = $"You were away for {FormatDuration(secondsAway)}";
 
         if (petalsEarnedText != null)
         {
             if (petalsEarned > 0)
             {
-                petalsEarnedText.text = $"+{FormatNumber(petalsEarned)} petals earned";
+                petalsEarnedText.text = $"+{FormatNumber(petalsEarned)} petals collected";
                 petalsEarnedText.gameObject.SetActive(true);
             }
             else
@@ -57,9 +58,11 @@ public class AwayPopup : MonoBehaviour
 
         if (flowersBloomedText != null)
         {
-            if (flowersBloomed > 0)
+            if (offlineHarvests > 0)
             {
-                flowersBloomedText.text = $"{flowersBloomed} flower{(flowersBloomed > 1 ? "s" : "")} bloomed";
+                flowersBloomedText.text = offlineHarvests == 1
+                    ? "1 flower was harvested for you"
+                    : $"{offlineHarvests} flowers were harvested for you";
                 flowersBloomedText.gameObject.SetActive(true);
             }
             else
@@ -69,6 +72,23 @@ public class AwayPopup : MonoBehaviour
         }
 
         gameObject.SetActive(true);
+    }
+
+    string PickTitle(float secondsAway, double petalsEarned)
+    {
+        if (petalsEarned <= 0)
+            return "Welcome back!";
+
+        if (secondsAway >= 28800) // 8+ hours
+            return "Your garden bloomed while you slept!";
+
+        if (secondsAway >= 3600) // 1+ hour
+            return "Your flowers worked hard while you were away!";
+
+        if (secondsAway >= 300) // 5+ minutes
+            return "Your garden kept growing!";
+
+        return "Welcome back!";
     }
 
     void Close()

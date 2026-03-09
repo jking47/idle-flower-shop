@@ -77,7 +77,11 @@ public class GameJuice : MonoBehaviour
         if (Services.TryGet<GardenManager>(out var garden))
         {
             if (evt.plotIndex >= 0 && evt.plotIndex < garden.Plots.Count)
-                PunchScale(garden.Plots[evt.plotIndex].transform);
+            {
+                var plot = garden.Plots[evt.plotIndex];
+                PunchScale(plot.transform);
+                UIBurst.Emit(plot.transform as RectTransform, new Color(0.95f, 0.85f, 0.2f, 1f), 8);
+            }
         }
     }
 
@@ -99,13 +103,19 @@ public class GameJuice : MonoBehaviour
         if (Services.TryGet<GardenManager>(out var garden))
         {
             if (evt.plotIndex >= 0 && evt.plotIndex < garden.Plots.Count)
-                StartBloomPulse(garden.Plots[evt.plotIndex].transform);
+            {
+                var plot = garden.Plots[evt.plotIndex];
+                StartBloomPulse(plot.transform);
+                UIBurst.Emit(plot.transform as RectTransform, new Color(1f, 0.55f, 0.8f, 1f), 10);
+            }
         }
     }
 
     void OnOrderFilled(OrderFilledEvent evt)
     {
         PlayClip(orderFillSfx);
+        // Coin burst at screen center-bottom (shop panel area) — no specific transform available
+        // Burst will be emitted from StorePanel's order UI instead via direct call if needed
     }
 
     // --- Public API for one-off feedback ---

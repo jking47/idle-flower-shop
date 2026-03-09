@@ -19,5 +19,5 @@ MonoBehaviour:
   - flower: {fileID: 11400000, guid: dc0eab33052d500c2877757925dfe1d1, type: 2}
     count: 3
   baseCoinReward: 100
-  timeLimit: 90
+  timeLimit: 240
   minShopLevel: 2

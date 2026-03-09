@@ -18,6 +18,7 @@ public class MockSocialService : MonoBehaviour, ISocialService
     List<GiftData> pendingGifts;
     List<CoopOrderData> coopOrders;
     HashSet<string> giftedToday = new();
+    bool giftsCollectedThisSession;
 
     // Seed for deterministic procedural generation
     System.Random rng;
@@ -185,6 +186,13 @@ public class MockSocialService : MonoBehaviour, ISocialService
 
     public void CollectGifts(Action<List<GiftData>> callback)
     {
+        // Return pending gifts only once per session to prevent duplicate inventory grants
+        if (giftsCollectedThisSession)
+        {
+            callback?.Invoke(new List<GiftData>());
+            return;
+        }
+        giftsCollectedThisSession = true;
         var collected = new List<GiftData>(pendingGifts);
         pendingGifts.Clear();
         callback?.Invoke(collected);

@@ -26,7 +26,12 @@ public class GardenManager : MonoBehaviour
 
     CurrencyManager currency;
 
-    const string UNLOCK_SAVE_KEY = "UnlockedPlots";
+    // Tracks which flower asset names the player has purchased/unlocked.
+    // Flowers with unlockCost < 0 are always unlocked.
+    readonly HashSet<string> unlockedFlowerNames = new();
+
+    // Legacy PlayerPrefs key — kept only for one-time migration in SaveSystem
+    public const string UNLOCK_SAVE_KEY_LEGACY = "UnlockedPlots";
 
     public IReadOnlyList<FlowerBed> Plots => plots;
     public IReadOnlyList<FlowerData> AvailableFlowers => availableFlowers;
@@ -42,16 +47,26 @@ public class GardenManager : MonoBehaviour
     {
         currency = Services.Get<CurrencyManager>();
 
+        // Flowers with no unlock cost are always available
+        foreach (var f in availableFlowers)
+            if (f.unlockCost < 0)
+                unlockedFlowerNames.Add(f.name);
+
         for (int i = 0; i < plots.Count; i++)
         {
             plots[i].Initialize(i);
         }
 
         ApplyRowLocks();
-        LoadUnlockState();
 
-        // Auto-plant first flower on fresh start so new players see immediate progress
-        if (!PlayerPrefs.HasKey(UNLOCK_SAVE_KEY) && availableFlowers.Count > 0)
+        // Auto-plant first flower on fresh start so new players see immediate progress.
+        // SaveSystem.Load() hasn't run yet — check whether any save exists.
+        bool isFreshStart = !Services.TryGet<SaveSystem>(out var save) || !save.HasSave();
+        // Also treat legacy-only saves (PlayerPrefs unlock key present) as non-fresh
+        if (isFreshStart && PlayerPrefs.HasKey(UNLOCK_SAVE_KEY_LEGACY))
+            isFreshStart = false;
+
+        if (isFreshStart && availableFlowers.Count > 0)
         {
             if (plots.Count > 0 && !plots[0].IsLocked && plots[0].State == PlotState.Empty)
                 plots[0].Plant(availableFlowers[0]);
@@ -139,6 +154,37 @@ public class GardenManager : MonoBehaviour
         autoPlantUnlocked = true;
     }
 
+    // --- Flower Type Unlocks ---
+
+    public bool IsFlowerUnlocked(FlowerData flower)
+    {
+        return flower.unlockCost < 0 || unlockedFlowerNames.Contains(flower.name);
+    }
+
+    /// <summary>
+    /// Attempts to spend petals and unlock a flower type.
+    /// Returns true on success, false if insufficient petals.
+    /// </summary>
+    public bool TryUnlockFlower(FlowerData flower)
+    {
+        if (IsFlowerUnlocked(flower)) return true;
+        if (!currency.Spend(CurrencyType.Petals, flower.unlockCost)) return false;
+
+        unlockedFlowerNames.Add(flower.name);
+        EventBus.Publish(new FlowerTypeUnlockedEvent { flowerName = flower.name });
+        Debug.Log($"[Garden] Unlocked flower: {flower.displayName}");
+        return true;
+    }
+
+    public List<string> GetUnlockedFlowerNamesList() => new(unlockedFlowerNames);
+
+    public void LoadUnlockedFlowers(List<string> names)
+    {
+        if (names == null) return;
+        foreach (string n in names)
+            unlockedFlowerNames.Add(n);
+    }
+
     void AutoHarvestAll()
     {
         foreach (var plot in plots)
@@ -151,24 +197,64 @@ public class GardenManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Apply offline elapsed time to all growing plots.
+    /// Apply offline elapsed time to all growing plots, simulating multiple
+    /// grow → harvest → replant cycles per plot. Returns total offline harvests.
     /// </summary>
-    public void ApplyOfflineTime(float seconds)
+    public int ApplyOfflineTime(float seconds)
     {
+        int totalHarvests = 0;
         foreach (var plot in plots)
         {
             if (!plot.IsLocked)
-                plot.ApplyOfflineTime(seconds);
+                totalHarvests += SimulateOfflinePlot(plot, seconds);
         }
+        return totalHarvests;
+    }
 
-        if (autoHarvestUnlocked && autoHarvestInterval > 0)
+    /// <summary>
+    /// Simulates grow/harvest/replant cycles for a single plot over the offline period.
+    /// Returns how many times the plot was harvested.
+    /// </summary>
+    int SimulateOfflinePlot(FlowerBed plot, float remainingTime)
+    {
+        int harvests   = 0;
+        int maxCycles  = 500; // safety cap — prevents infinite loops on very short grow times
+        int iterations = 0;
+
+        while (remainingTime > 0f && iterations++ < maxCycles)
         {
-            int cycles = Mathf.FloorToInt(seconds / autoHarvestInterval);
-            for (int i = 0; i < cycles; i++)
+            if (plot.State == PlotState.Growing)
             {
-                AutoHarvestAll();
+                float timeToBloom = (1f - plot.GrowthProgress) * plot.GrowthDuration;
+
+                if (remainingTime < timeToBloom)
+                {
+                    // Not enough time to bloom — advance partial growth and stop
+                    plot.ApplyOfflineTime(remainingTime);
+                    break;
+                }
+
+                // Enough time to bloom this plant
+                plot.ForceBloom();
+                remainingTime -= timeToBloom;
+            }
+            else if (plot.State == PlotState.Bloomed)
+            {
+                if (!autoHarvestUnlocked) break;
+
+                plot.AutoHarvest(); // earns petals; auto-replants if unlocked + affordable
+                harvests++;
+
+                // If auto-replant didn't happen the plot is empty — nothing more to simulate
+                if (plot.State != PlotState.Growing) break;
+            }
+            else
+            {
+                break; // Empty with no auto-plant — done
             }
         }
+
+        return harvests;
     }
 
     /// <summary>
@@ -188,28 +274,27 @@ public class GardenManager : MonoBehaviour
         }
     }
 
-    // --- Unlock Persistence ---
+    // --- Unlock Persistence (JSON-based, via SaveSystem) ---
 
-    public void SaveUnlockState()
+    /// <summary>Returns indices of all currently unlocked plots for serialization.</summary>
+    public List<int> GetUnlockedPlotIndices()
     {
-        var unlocked = new List<string>();
+        var result = new List<int>();
         for (int i = 0; i < plots.Count; i++)
         {
             if (!plots[i].IsLocked)
-                unlocked.Add(i.ToString());
+                result.Add(i);
         }
-        PlayerPrefs.SetString(UNLOCK_SAVE_KEY, string.Join(",", unlocked));
-        PlayerPrefs.Save();
+        return result;
     }
 
-    void LoadUnlockState()
+    /// <summary>Restores unlock state from deserialized indices.</summary>
+    public void ApplyUnlockedPlotIndices(List<int> indices)
     {
-        if (!PlayerPrefs.HasKey(UNLOCK_SAVE_KEY)) return;
-
-        string data = PlayerPrefs.GetString(UNLOCK_SAVE_KEY);
-        foreach (string idx in data.Split(','))
+        if (indices == null) return;
+        foreach (int i in indices)
         {
-            if (int.TryParse(idx, out int i) && i >= 0 && i < plots.Count)
+            if (i >= 0 && i < plots.Count)
                 plots[i].ClearLock();
         }
     }

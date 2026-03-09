@@ -67,6 +67,9 @@ public class PhasePopup : MonoBehaviour
             descriptionText.color = new Color(0.85f, 0.88f, 0.9f);
         }
 
+        if (Services.TryGet<GameJuice>(out var juice))
+            juice.PlayUnlock();
+
         StopAllCoroutines();
         StartCoroutine(AutoHide(phase));
     }
@@ -172,9 +175,9 @@ public class PhasePopup : MonoBehaviour
             GamePhase.Shop     => "Your shop is open for business!\n\n" +
                                   "Tap the Shop button to see customer orders.\n" +
                                   "Fill orders to earn coins!",
-            GamePhase.Business => "Time to scale up!\n\n" +
-                                  "Hire staff and take on bulk orders\n" +
-                                  "for maximum profit.",
+            GamePhase.Business => "You've built a real business!\n\n" +
+                                  "Staff management and bulk orders\n" +
+                                  "are coming in a future update.",
             _                  => "New features unlocked!"
         };
     }

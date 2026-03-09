@@ -62,6 +62,14 @@ public class DebugPanel : MonoBehaviour
         }
     }
 
+    void TriggerPest()
+    {
+        if (Services.TryGet<PestManager>(out var pests))
+            pests.TriggerPestEvent();
+        else
+            Debug.LogWarning("[Debug] PestManager not found — is it on the GameManager object?");
+    }
+
     void AdvancePhase()
     {
         var gm = Services.Get<GameManager>();
@@ -83,6 +91,12 @@ public class DebugPanel : MonoBehaviour
         var save = Services.Get<SaveSystem>();
         if (save != null)
             save.DeleteSave();
+
+        // Clear data stored outside the main save JSON
+        if (Services.TryGet<TutorialManager>(out var tutorial))
+            tutorial.ResetTutorial();
+        // Also remove any legacy plot-unlock PlayerPrefs key that may have survived migration
+        PlayerPrefs.DeleteKey(GardenManager.UNLOCK_SAVE_KEY_LEGACY);
 
         Debug.Log("[Debug] Save wiped. Reloading...");
 
@@ -173,6 +187,10 @@ public class DebugPanel : MonoBehaviour
 
         // --- Phase ---
         MakeButton(panelRt, "Next Phase", AdvancePhase);
+
+        // --- Events ---
+        MakeLabel(panelRt, "— Events —", 18);
+        MakeButton(panelRt, "Trigger Pest", TriggerPest);
 
         // --- Save ---
         MakeLabel(panelRt, "— Save —", 18);

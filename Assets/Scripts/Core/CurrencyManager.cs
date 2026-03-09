@@ -23,7 +23,7 @@ public class CurrencyManager : MonoBehaviour
 
     public double GetBalance(CurrencyType type) => balances[type];
 
-    public bool CanAfford(CurrencyType type, double cost) => balances[type] >= cost - 0.001;
+    public bool CanAfford(CurrencyType type, double cost) => balances[type] >= cost;
 
     /// <summary>
     /// Add currency. Returns new balance. Use for harvests, sales, rewards.
@@ -63,7 +63,7 @@ public class CurrencyManager : MonoBehaviour
         if (!CanAfford(type, cost)) return false;
 
         double prev = balances[type];
-        balances[type] -= cost;
+        balances[type] = Math.Max(0, balances[type] - cost);
 
         EventBus.Publish(new CurrencyChangedEvent
         {

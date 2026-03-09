@@ -13,13 +13,13 @@ MonoBehaviour:
   m_Name: Flower_5_Orchid
   m_EditorClassIdentifier: Assembly-CSharp::FlowerData
   displayName: Orchid
-  description: A cosmopolitan plant
+  description: Premium value — the best coin-per-minute flower in the shop phase
   rarity: 1
   icon: {fileID: 0}
-  growTime: 30
-  baseYield: 30
-  plantCost: 25
-  baseSellValue: 30
+  growTime: 20
+  baseYield: 15
+  plantCost: 30
+  baseSellValue: 45
   requiredPhase: 2
-  unlockCost: -1
+  unlockCost: 500
   socialExclusive: 0

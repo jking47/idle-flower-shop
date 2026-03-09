@@ -5,6 +5,7 @@ using UnityEngine.UI;
 /// Tints the FlowerBed background image based on plot state.
 /// Add to the same GameObject as FlowerBed.
 /// Uses the Image component already on the FlowerBed (the Button's target graphic).
+/// Event-driven: subscribes to garden events instead of polling in Update().
 /// </summary>
 [RequireComponent(typeof(FlowerBed))]
 public class FlowerBedTint : MonoBehaviour
@@ -19,7 +20,6 @@ public class FlowerBedTint : MonoBehaviour
 
     Image bgImage;
     FlowerBed bed;
-    PlotState lastState = (PlotState)(-1);
     Outline outline;
 
     void Awake()
@@ -35,18 +35,36 @@ public class FlowerBedTint : MonoBehaviour
         outline.effectDistance = new Vector2(2, -2);
     }
 
-    void Update()
+    void OnEnable()
     {
-        if (bed == null || bgImage == null) return;
-        if (bed.State == lastState) return;
+        EventBus.Subscribe<FlowerPlantedEvent>(OnPlotStateChanged);
+        EventBus.Subscribe<FlowerBloomedEvent>(OnPlotStateChanged);
+        EventBus.Subscribe<FlowerHarvestedEvent>(OnPlotStateChanged);
 
-        lastState = bed.State;
-        bgImage.color = lastState switch
+        // Re-apply tint on re-enable (e.g. after save/load)
+        if (bed != null) ApplyTint(bed.State);
+    }
+
+    void OnDisable()
+    {
+        EventBus.Unsubscribe<FlowerPlantedEvent>(OnPlotStateChanged);
+        EventBus.Unsubscribe<FlowerBloomedEvent>(OnPlotStateChanged);
+        EventBus.Unsubscribe<FlowerHarvestedEvent>(OnPlotStateChanged);
+    }
+
+    void OnPlotStateChanged(FlowerPlantedEvent e)  => ApplyTint(bed.State);
+    void OnPlotStateChanged(FlowerBloomedEvent e)   => ApplyTint(bed.State);
+    void OnPlotStateChanged(FlowerHarvestedEvent e) => ApplyTint(bed.State);
+
+    void ApplyTint(PlotState state)
+    {
+        if (bgImage == null) return;
+        bgImage.color = state switch
         {
-            PlotState.Empty => emptyColor,
+            PlotState.Empty   => emptyColor,
             PlotState.Growing => growingColor,
             PlotState.Bloomed => bloomedColor,
-            _ => emptyColor
+            _                 => emptyColor
         };
     }
 }
